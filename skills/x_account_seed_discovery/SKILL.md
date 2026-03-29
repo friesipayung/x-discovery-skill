@@ -1,0 +1,254 @@
+---
+name: x-account-seed-discovery
+description: Use when discovering X.com seed accounts for crawling based on news-grounded topics, filtering opportunistic accounts, and evaluating account eligibility with AI judgment
+---
+
+# X Account Seed Discovery
+
+## Overview
+
+Discover quality X.com seed accounts using a **news-first approach** that grounds account search in actual news topics rather than profile metadata alone. This skill extracts keywords from news articles, searches X posts using those keywords, and evaluates accounts based on their actual posting behavior with AI judgment.
+
+**Core principle:** Post evidence > bio claims. Relevance is proven through what accounts actually post, not what they claim in their profile.
+
+## When to Use
+
+**Use this skill when:**
+- You need seed accounts for X.com crawling/monitoring
+- You want accounts that genuinely discuss specific topics (not just have keywords in bio)
+- You need to filter out opportunistic accounts, spam, promo, porn, gambling
+- You want news-grounded discovery that follows actual current issues
+- You need persistent, auditable results with SQLite storage
+
+**Don't use when:**
+- You just need random popular accounts
+- You want real-time monitoring (this is discovery, not monitoring)
+- You need deep engagement analytics
+- You want automatic scheduled reruns
+
+## Core Workflow
+
+```
+Input (topic + constraints)
+  ↓
+Search news articles for topic
+  ↓
+Extract keywords/entities from news
+  ↓
+Build X search queries
+  ↓
+Search X posts by keywords
+  ↓
+Extract accounts from matched posts
+  ↓
+Aggregate topic signals per account
+  ↓
+Anti riding-the-waves filter
+  ↓
+Deterministic prefilter
+  ↓
+AI judge eligibility
+  ↓
+Upsert to SQLite
+  ↓
+Export eligible accounts
+```
+
+## Quick Reference
+
+### Required Input
+```json
+{
+  "topic": "politics"
+}
+```
+
+### Common Optional Parameters
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `region` | `Indonesia` | Geographic scope |
+| `min_followers` | - | Minimum follower count |
+| `max_news_articles` | 20 | News articles to fetch |
+| `max_x_posts` | 300 | X posts to search |
+| `max_accounts_to_evaluate` | 100 | Accounts for AI evaluation |
+| `anti_wave_mode` | true | Filter opportunistic accounts |
+| `save_mode` | `all` | `all` or `eligible_only` |
+
+### Output Decisions
+- `eligible` - Quality seed account
+- `not_eligible` - Rejected (spam/off-topic/opportunistic)
+- `uncertain` - Needs human review
+
+## Implementation
+
+### 1. Setup SQLite Database
+
+```sql
+-- Run schema.sql to initialize tables
+sqlite3 seeds.db < skills/x_account_seed_discovery/sql/schema.sql
+```
+
+### 2. Configure Environment
+
+```bash
+export SQLITE_PATH="seeds.db"
+export DEFAULT_REGION="Indonesia"
+# Provider credentials per your runtime
+```
+
+### 3. Run Discovery
+
+**Claude Code example:**
+```
+@x_account_seed_discovery with topic="government" region="Indonesia" min_followers=5000
+```
+
+**Opencode example:**
+```bash
+opencode run skill x_account_seed_discovery --input '{
+  "topic": "mining policy",
+  "region": "Indonesia",
+  "min_followers": 10000,
+  "anti_wave_mode": true
+}'
+```
+
+**Direct JSON input:**
+```json
+{
+  "topic": "politics",
+  "region": "Indonesia",
+  "min_followers": 5000,
+  "min_posts": 50,
+  "max_news_articles": 20,
+  "max_keywords": 40,
+  "max_x_posts": 300,
+  "max_accounts_to_evaluate": 100,
+  "anti_wave_mode": true,
+  "save_mode": "all"
+}
+```
+
+### 4. Export Results
+
+```sql
+-- Export eligible accounts
+SELECT a.handle, a.display_name, a.followers_count, 
+       ae.decision, ae.score, ae.reason_short
+FROM accounts a
+JOIN account_evaluations ae ON a.id = ae.account_id
+WHERE ae.decision = 'eligible'
+  AND ae.topic = 'politics'
+ORDER BY ae.score DESC;
+```
+
+## Anti Riding-the-Waves Filter
+
+The skill aggressively filters opportunistic accounts that hijack trending topics:
+
+**Strong rejection signals:**
+- Bio contains: `slot`, `judi`, `casino`, `promo`, `onlyfans`, `bokep`, `open bo`, `pinjol`, `affiliate`
+- Display name or URL indicates spam/promo/porn
+- Matched posts are few and clearly opportunistic
+- Sample posts show more noise/promo than topic relevance
+- Hashtags are inconsistent with topic
+
+**How it works:**
+1. Rule-based deterministic filter runs before AI judgment
+2. Flags are passed to AI judge as context
+3. AI can reject even if account passes rule filter
+
+## AI Evaluation Rubric
+
+### Eligible
+- Clearly relevant to topic AND region
+- Sample posts show topic consistency
+- No spam/promo/porn/gambling signals
+- Worthy of seed monitoring
+
+### Uncertain
+- Weak relevance signals
+- Too few sample posts
+- Incomplete metadata
+- Possible relevance but not strong enough
+
+### Not Eligible
+- Off-topic
+- Dominant spam/promo/porn/gambling/clickbait
+- Highly opportunistic
+- Clear region mismatch
+- Only riding keyword trends without substance
+
+**AI instructions:**
+- Don't select just because account is big or verified
+- Don't select just because bio looks relevant
+- Sample posts matter more than bio
+- Opportunistic/trend hijackers get heavy penalty
+
+## Data Persistence
+
+### Tables
+- `runs` - Run metadata and statistics
+- `news_articles` - Fetched news articles
+- `run_keywords` - Extracted keywords per run
+- `accounts` - Master account records (unique by handle_normalized)
+- `account_topic_signals` - Aggregated signals per run
+- `account_evaluations` - AI evaluation results per run
+- `account_tags` - Tags for accounts
+
+### Idempotency
+- Reruns don't create duplicate account master rows
+- Same handle normalized → upsert existing account
+- New evaluation row created for re-evaluations
+- Run metadata always fresh
+
+## Common Mistakes
+
+### ❌ Wrong: Profile-only search
+Searching X profiles by bio keywords misses accounts that actually post about the topic.
+
+### ✅ Right: Post-first discovery
+Search posts by topic keywords, then extract authors. Post evidence proves relevance.
+
+### ❌ Wrong: Accepting all big accounts
+Large follower count ≠ relevant to your topic.
+
+### ✅ Right: AI judgment with context
+AI evaluates based on sample posts, not just metrics.
+
+### ❌ Wrong: No anti-wave filtering
+Without filtering, 30-50% of results can be opportunistic spam/promo accounts.
+
+### ✅ Right: Aggressive prefilter
+Blocklist keywords and pattern matching catch most noise before AI evaluation.
+
+## Error Handling
+
+- **Partial failures OK:** One bad candidate doesn't stop the run
+- **Invalid AI JSON:** Retry with prompt adjustment
+- **Missing provider data:** Continue with available fields
+- **DB errors:** Fatal only for persistence/init failures
+- **Always produces:** Summary with partial results
+
+## Performance Tips
+
+1. **Start small:** Use `max_accounts_to_evaluate=50` for testing
+2. **Dry run:** Set `dry_run=true` to preview without DB writes
+3. **Tight constraints:** Narrow `min_followers` and `region` to reduce noise
+4. **Review uncertain:** Check `uncertain` decisions to tune prompts
+
+## Files Reference
+
+| File | Purpose |
+|------|---------|
+| `SKILL.md` | This file - usage guide |
+| `docs/TECHNICAL_DESIGN.md` | Architecture and implementation details |
+| `docs/PRD.md` | Full product requirements |
+| `sql/schema.sql` | SQLite database schema |
+| `prompts/seed_judge.md` | AI judge prompt template |
+| `schemas/input.json` | Input validation schema |
+| `schemas/output.json` | Output validation schema |
+
+## Version
+
+v1.0 - Initial release with news-first workflow, anti-wave filtering, and SQLite persistence.

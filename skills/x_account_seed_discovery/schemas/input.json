@@ -1,0 +1,152 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "X Account Seed Discovery Input",
+  "description": "Input parameters for X account seed discovery skill",
+  "type": "object",
+  "required": ["topic"],
+  "properties": {
+    "topic": {
+      "type": "string",
+      "description": "Topic to search for (e.g., 'politics', 'mining policy', 'government')",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "region": {
+      "type": "string",
+      "description": "Geographic region scope",
+      "default": "Indonesia",
+      "examples": ["Indonesia", "Jakarta", "West Java", "Southeast Asia", "Global"]
+    },
+    "min_followers": {
+      "type": "integer",
+      "description": "Minimum follower count filter",
+      "minimum": 0,
+      "examples": [1000, 5000, 10000]
+    },
+    "max_followers": {
+      "type": "integer",
+      "description": "Maximum follower count filter",
+      "minimum": 0,
+      "examples": [100000, 1000000]
+    },
+    "min_posts": {
+      "type": "integer",
+      "description": "Minimum post count filter",
+      "minimum": 0,
+      "examples": [50, 100, 500]
+    },
+    "language": {
+      "type": "string",
+      "description": "Language code for content filtering",
+      "pattern": "^[a-z]{2}$",
+      "examples": ["id", "en", "ms"]
+    },
+    "must_be_verified": {
+      "type": "boolean",
+      "description": "Only include verified accounts",
+      "default": false
+    },
+    "must_have_profile_image": {
+      "type": "boolean",
+      "description": "Only include accounts with profile images",
+      "default": false
+    },
+    "include_keywords": {
+      "type": "array",
+      "description": "Additional keywords to include in search",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "examples": [["DPR", "MPR", "presiden"], ["tambang", "minerba", "smelter"]]
+    },
+    "exclude_keywords": {
+      "type": "array",
+      "description": "Keywords to exclude from search",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "examples": [["judi", "slot", "promo"]]
+    },
+    "max_news_articles": {
+      "type": "integer",
+      "description": "Maximum news articles to fetch",
+      "default": 20,
+      "minimum": 1,
+      "maximum": 100
+    },
+    "max_keywords": {
+      "type": "integer",
+      "description": "Maximum keywords to extract from news",
+      "default": 40,
+      "minimum": 5,
+      "maximum": 200
+    },
+    "max_x_posts": {
+      "type": "integer",
+      "description": "Maximum X posts to search",
+      "default": 300,
+      "minimum": 10,
+      "maximum": 1000
+    },
+    "max_accounts_to_evaluate": {
+      "type": "integer",
+      "description": "Maximum accounts for AI evaluation",
+      "default": 100,
+      "minimum": 1,
+      "maximum": 500
+    },
+    "anti_wave_mode": {
+      "type": "boolean",
+      "description": "Enable anti riding-the-waves filtering",
+      "default": true
+    },
+    "save_mode": {
+      "type": "string",
+      "description": "Which results to save to database",
+      "enum": ["all", "eligible_only"],
+      "default": "all"
+    },
+    "custom_prompt_appendix": {
+      "type": "string",
+      "description": "Custom text to append to AI judge prompt",
+      "maxLength": 2000
+    },
+    "provider": {
+      "type": "string",
+      "description": "Provider configuration name",
+      "default": "default"
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "Preview mode - don't write to database",
+      "default": false
+    }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "topic": "politics",
+      "region": "Indonesia",
+      "min_followers": 5000,
+      "min_posts": 50,
+      "language": "id",
+      "must_be_verified": false,
+      "max_news_articles": 20,
+      "max_keywords": 40,
+      "max_x_posts": 300,
+      "max_accounts_to_evaluate": 100,
+      "anti_wave_mode": true,
+      "save_mode": "all"
+    },
+    {
+      "topic": "mining policy",
+      "region": "Indonesia",
+      "min_followers": 10000,
+      "include_keywords": ["tambang", "minerba", "smelter", "nikel"],
+      "max_accounts_to_evaluate": 50,
+      "dry_run": true
+    }
+  ]
+}
