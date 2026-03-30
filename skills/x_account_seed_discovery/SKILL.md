@@ -242,6 +242,13 @@ python skills/x_account_seed_discovery/scripts/search_news.py \
   --region "Indonesia" \
   --max-results 20
 
+# Search news with SSL verification disabled (if you get certificate errors)
+python skills/x_account_seed_discovery/scripts/search_news.py \
+  --topic "politics" \
+  --region "Indonesia" \
+  --max-results 20 \
+  --no-verify-ssl
+
 # Search X via Nitter
 # IMPORTANT: Global flags (--headless, --no-stealth, etc.) MUST come BEFORE the subcommand
 python skills/x_account_seed_discovery/scripts/search_nitter.py \
@@ -410,6 +417,15 @@ Global flags (`--headless`, `--profile-dir`, `--no-stealth`) are defined on the 
 # ✅ WORKS: Global flags BEFORE subcommand
 python search_nitter.py --headless search --query "test"
 ```
+
+### ❌ Wrong: SSL certificate errors stop execution
+If you get `SSLCertVerificationError` with DuckDuckGo news search, the script stops.
+
+### ✅ Right: Use --no-verify-ssl for DuckDuckGo
+```bash
+python search_news.py --topic "test" --region "Indonesia" --no-verify-ssl
+```
+Note: This only affects the DuckDuckGo provider. SerpAPI doesn't need this flag.
 
 ### ❌ Wrong: Profile-only search
 Searching X profiles by bio keywords misses accounts that actually post about the topic.
