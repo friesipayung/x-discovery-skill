@@ -15,7 +15,7 @@ Discover quality **individual** X.com seed accounts using a **news-first approac
 
 1. **Searches news articles** for your topic to find current, relevant issues
 2. **Extracts keywords and entities** from those articles
-3. **Searches X posts** via Nitter instances using those keywords
+3. **Searches X posts** via TwStalker first (more reliable), then falls back to Nitter instances if needed
 4. **Filters out spam/promo/opportunistic accounts** with aggressive anti-wave filtering
 5. **Filters out government/organization/brand accounts** - keeping only individual users
 6. **Uses AI to judge** which accounts are quality seed candidates
@@ -99,41 +99,62 @@ Export eligible accounts
 - `not_eligible` - Rejected (spam/off-topic/opportunistic)
 - `uncertain` - Needs human review
 
-## Nitter Instance Management
+## X Search Providers
 
-The skill uses multiple Nitter instances with automatic load balancing and rate limit awareness:
+The skill uses **TwStalker as the primary search provider**, with automatic fallback to Nitter instances when needed.
 
-### Default Instances
+### Primary: TwStalker
+
+**TwStalker** (`w.twstalker.com`) is the default and most reliable X viewer:
+
+- **Better anti-detection** - Lower Cloudflare challenge rates
+- **Human challenge resolution** - Waits for manual CAPTCHA solving in headful mode
+- **Profile enrichment** - Automatically visits profile pages to get full account details (followers, bio, etc.)
+- **Quick mode available** - Use `--quick` flag to skip profile enrichment for faster discovery
+- **Rate limit respect** - Built-in delays and exponential backoff
+
+**Usage:**
+```bash
+# Quick discovery mode (fast, returns handles only)
+python skills/x_account_seed_discovery/scripts/search_twstalker.py \
+  search \
+  --query "politics Indonesia" \
+  --max-results 50 \
+  --quick
+
+# Full enrichment mode (slower, visits each profile for complete data)
+python skills/x_account_seed_discovery/scripts/search_twstalker.py \
+  search \
+  --query "politics Indonesia" \
+  --max-results 20
+
+# Get detailed profile info for specific account
+python skills/x_account_seed_discovery/scripts/search_twstalker.py \
+  profile prabowo \
+  --output profile.json
+```
+
+### Fallback: Nitter Instances
+
+If TwStalker fails or is unavailable, the skill automatically falls back to Nitter instances:
 
 ```python
 NITTER_INSTANCES = [
     "https://nitter.net",
     "https://nitter.privacyredirect.com",
-    "https://w.twstalker.com",  # Alternative X viewer
 ]
 ```
 
-✅ **Removed non-working instances:**
+**Removed non-working instances:**
 - ❌ `xcancel.com` (Cloudflare)
 - ❌ `lightbrd.com` (Cloudflare)
 - ❌ `nitter.space` (Cloudflare + Ads)
 - ❌ `nuku.trabun.org` (Cloudflare)
 - ❌ `nitter.poast.org` (Always returns 403)
-- ❌ `nitter.tiekoetter.com` (Blocks automation/scraping)
+- ❌ `nitter.tiekoetter.com` (Blocks automation)
 - ❌ `nitter.catsarch.com` (Not working)
 
-**Alternative X Viewers:**
-- **TwStalker** (`w.twstalker.com`) - Often more reliable than Nitter, provides public profile viewing
-- Can be added via `NITTER_INSTANCES` env var for automatic load balancing
-
 See [Nitter Instances Wiki](https://github.com/zedeus/nitter/wiki/Instances) for the full list.
-
-### Rate Limit Handling
-
-- Tracks response times and error rates per instance
-- Automatically rotates to healthy instances
-- Exponential backoff for rate-limited instances
-- Marks instances as unhealthy after consecutive failures
 
 ### Chrome Profile
 
@@ -180,9 +201,10 @@ Before using this skill, ensure you have:
 - No browser automation needed
 
 **X/Twitter Access (Browser-based):**
-- Uses Nitter instances via Playwright with Chrome profile
+- **Primary:** TwStalker via Playwright with Chrome profile (more reliable, better anti-detection)
+- **Fallback:** Nitter instances when TwStalker fails
 - Chrome profile stored at `~/.x-discovery/chrome-profile`
-- Automatic instance rotation with rate limit awareness
+- Automatic rate limit handling with human Cloudflare challenge resolution
 - Stealth mode to avoid detection
 
 ### 1. Setup SQLite Database
@@ -277,7 +299,25 @@ python skills/x_account_seed_discovery/scripts/search_news.py \
   --no-verify-ssl \
   --provider duckduckgo
 
-# Search X via Nitter
+# Search X via TwStalker (PRIMARY - recommended)
+python skills/x_account_seed_discovery/scripts/search_twstalker.py \
+  search \
+  --query "politics Indonesia" \
+  --max-results 50
+
+# Quick mode - faster, returns handles only (no profile visits)
+python skills/x_account_seed_discovery/scripts/search_twstalker.py \
+  search \
+  --query "politics Indonesia" \
+  --max-results 100 \
+  --quick
+
+# Get detailed profile
+python skills/x_account_seed_discovery/scripts/search_twstalker.py \
+  profile prabowo \
+  --output profile.json
+
+# Search X via Nitter (FALLBACK when TwStalker fails)
 # IMPORTANT: Global flags (--headless, --no-stealth, etc.) MUST come BEFORE the subcommand
 python skills/x_account_seed_discovery/scripts/search_nitter.py \
   --headless \
@@ -607,9 +647,16 @@ See [README.md](../../README.md#updating) for detailed update instructions inclu
 | `prompts/seed_judge.md` | AI judge prompt template |
 | `schemas/input.json` | Input validation schema |
 | `schemas/output.json` | Output validation schema |
-| `scripts/search_news.py` | News search (DuckDuckGo/SerpAPI) |
-| `scripts/search_nitter.py` | X/Twitter search via Nitter (Playwright) |
+| `scripts/search_news.py` | News search (Serper/SerpAPI/DuckDuckGo) |
+| `scripts/search_twstalker.py` | X/Twitter search via TwStalker (PRIMARY, Playwright) |
+| `scripts/search_nitter.py` | X/Twitter search via Nitter (FALLBACK, Playwright) |
 
 ## Version
 
-v1.0 - Initial release with news-first workflow, anti-wave filtering, and SQLite persistence.
+v1.1 - Changed X search provider priority: TwStalker is now PRIMARY (more reliable), Nitter is FALLBACK.
+
+**Changes in v1.1:**
+- TwStalker is now the default X search provider (better anti-detection, human challenge resolution)
+- Nitter instances moved to fallback position when TwStalker fails
+- Added `--quick` mode for fast discovery without profile enrichment
+- Added automatic profile page visits for complete account details (followers, bio, etc.)
