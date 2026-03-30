@@ -91,6 +91,34 @@ See https://github.com/zedeus/nitter/wiki/Instances for the full list.
 
 - `NITTER_INSTANCES` - Comma-separated list of custom instances (optional)
 
+### 3. search_twstalker.py (Alternative to Nitter)
+
+Search X/Twitter via **TwStalker** - an alternative viewer that's NOT a Nitter instance. Often works when Nitter instances are down or blocked.
+
+**Key differences from Nitter:**
+- Different architecture (not based on Nitter code)
+- May have different rate limits
+- Good fallback when Nitter fails
+
+**Usage:**
+
+```bash
+# Search for profiles
+python search_twstalker.py search --query "politics Indonesia" --max-results 50
+
+# Get profile info
+python search_twstalker.py profile jokowi --output profile.json
+
+# Run headless (not recommended)
+python search_twstalker.py --headless search --query "test" --max-results 10
+```
+
+**Features:**
+
+- **Alternative to Nitter** - uses TwStalker instead of Nitter instances
+- **No instance rotation** - single endpoint
+- **Fallback option** when all Nitter instances fail
+
 ## Installation
 
 ### 1. Install Dependencies
