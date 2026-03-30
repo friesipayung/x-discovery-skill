@@ -11,6 +11,17 @@ Discover quality X.com seed accounts using a **news-first approach** that ground
 
 **Core principle:** Post evidence > bio claims. Relevance is proven through what accounts actually post, not what they claim in their profile.
 
+### What This Skill Does
+
+1. **Searches news articles** for your topic to find current, relevant issues
+2. **Extracts keywords and entities** from those articles
+3. **Searches X posts** using those keywords to find accounts actually discussing the topic
+4. **Filters out spam/promo/opportunistic accounts** with aggressive anti-wave filtering
+5. **Uses AI to judge** which accounts are quality seed candidates
+6. **Saves results to SQLite** with full audit trail and no duplicates
+
+**Result:** A curated list of X accounts that genuinely discuss your topic, ready for monitoring or crawling.
+
 ## When to Use
 
 **Use this skill when:**
@@ -81,6 +92,29 @@ Export eligible accounts
 
 ## Implementation
 
+### Quick Start (5 minutes)
+
+```bash
+# 1. Setup database
+sqlite3 seeds.db < skills/x_account_seed_discovery/sql/schema.sql
+
+# 2. Set environment
+export SQLITE_PATH="seeds.db"
+export DEFAULT_REGION="Indonesia"
+
+# 3. Run with Claude Code
+@x_account_seed_discovery with topic="politics" region="Indonesia" min_followers=5000
+```
+
+### Prerequisites
+
+Before using this skill, ensure you have:
+- **SQLite 3.x** installed on your system
+- **News search provider** access (e.g., web search API, Brave Search, Serper)
+- **X/Twitter data provider** access (e.g., X API v2, or web scraping tools)
+- **This skill repository** cloned or downloaded locally
+- **Environment variables** configured (see below)
+
 ### 1. Setup SQLite Database
 
 ```sql
@@ -93,8 +127,17 @@ sqlite3 seeds.db < skills/x_account_seed_discovery/sql/schema.sql
 ```bash
 export SQLITE_PATH="seeds.db"
 export DEFAULT_REGION="Indonesia"
-# Provider credentials per your runtime
+
+# Provider credentials (depends on your runtime and providers):
+# - News provider: BRAVE_API_KEY, SERPER_API_KEY, etc.
+# - X/Twitter provider: X_API_KEY, X_API_SECRET, etc.
+# See TECHNICAL_DESIGN.md for provider-specific setup
 ```
+
+**Supported Runtimes:**
+- **Claude Code** - Use `@x_account_seed_discovery` with natural language parameters
+- **Opencode** - Use `opencode run skill x_account_seed_discovery` with JSON input
+- **Custom agentic tools** - Import and call with structured input/output
 
 ### 3. Run Discovery
 
@@ -129,10 +172,51 @@ opencode run skill x_account_seed_discovery --input '{
 }
 ```
 
+### Expected Output
+
+The skill returns a JSON summary including:
+- **Run metadata** - `run_id`, `topic`, `region`, timestamps
+- **Statistics** - Articles fetched, keywords extracted, posts searched, accounts evaluated
+- **Decision counts** - `total_eligible`, `total_not_eligible`, `total_uncertain`
+- **Eligible accounts** - Array of quality seed accounts with scores and reasons
+- **Errors** - Any issues encountered (empty array if successful)
+
+**Example output:**
+```json
+{
+  "run_id": "20260330T100000Z-abc123",
+  "topic": "politics",
+  "region": "Indonesia",
+  "total_eligible": 21,
+  "total_not_eligible": 28,
+  "total_uncertain": 8,
+  "eligible_accounts": [
+    {
+      "handle": "example",
+      "display_name": "Example Account",
+      "followers_count": 25000,
+      "decision": "eligible",
+      "score": 89,
+      "reason_short": "Akun rutin membahas isu pemerintahan Indonesia."
+    }
+  ],
+  "errors": []
+}
+```
+
+**Full output schema:** See `schemas/output.json` for complete structure.
+
 ### 4. Export Results
 
+All data is persisted to the SQLite database specified in `SQLITE_PATH`. Query it directly:
+
+```bash
+# Connect to your database
+sqlite3 $SQLITE_PATH
+```
+
+**Export eligible accounts for a topic:**
 ```sql
--- Export eligible accounts
 SELECT a.handle, a.display_name, a.followers_count, 
        ae.decision, ae.score, ae.reason_short
 FROM accounts a
@@ -140,6 +224,16 @@ JOIN account_evaluations ae ON a.id = ae.account_id
 WHERE ae.decision = 'eligible'
   AND ae.topic = 'politics'
 ORDER BY ae.score DESC;
+```
+
+**View run summary statistics:**
+```sql
+SELECT * FROM v_run_summary ORDER BY started_at DESC LIMIT 5;
+```
+
+**Export to CSV:**
+```bash
+sqlite3 $SQLITE_PATH -csv "SELECT * FROM v_eligible_accounts WHERE topic = 'politics'" > eligible_accounts.csv
 ```
 
 ## Anti Riding-the-Waves Filter
