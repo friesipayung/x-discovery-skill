@@ -5,10 +5,12 @@ This directory contains Python scripts for searching news and X/Twitter profiles
 ## Architecture
 
 **News Search (HTTP-based):**
+
 - `search_news.py` - Uses DuckDuckGo (free) or SerpAPI (Google News, requires API key)
 - No browser automation needed
 
 **X/Twitter Access (Browser-based):**
+
 - `search_nitter.py` - Uses Nitter instances via Playwright with Chrome profile
 - Automatic instance load balancing
 - Rate limit awareness
@@ -16,9 +18,11 @@ This directory contains Python scripts for searching news and X/Twitter profiles
 ## Scripts
 
 ### 1. search_news.py
+
 Search news articles using DuckDuckGo (free) or SerpAPI (Google News).
 
 **Usage:**
+
 ```bash
 # DuckDuckGo (free, no API key)
 python search_news.py --topic "politics" --region "Indonesia" --max-results 20
@@ -32,6 +36,7 @@ python search_news.py --topic "mining policy" --region "Indonesia" --output news
 ```
 
 **Features:**
+
 - DuckDuckGo: Free, no API keys needed
 - SerpAPI: Google News access (requires API key from https://serpapi.com)
 - Parses article titles, URLs, sources, and snippets
@@ -39,9 +44,11 @@ python search_news.py --topic "mining policy" --region "Indonesia" --output news
 - Outputs JSON for further processing
 
 ### 2. search_nitter.py
+
 Search X/Twitter via Nitter instances using Playwright with Chrome profile and automatic load balancing.
 
 **Usage:**
+
 ```bash
 # Search for posts (automatic instance rotation)
 python search_nitter.py search --query "politics Indonesia" --max-results 50
@@ -57,6 +64,7 @@ python search_nitter.py --headless search --query "test" --max-results 10
 ```
 
 **Features:**
+
 - **Automatic load balancing** across multiple Nitter instances
 - **Rate limit awareness** - tracks instance health and rotates on failures
 - **Chrome profile** - persists cookies and session data at `~/.x-discovery/chrome-profile`
@@ -64,6 +72,7 @@ python search_nitter.py --headless search --query "test" --max-results 10
 - **Instance health tracking** - marks unhealthy instances, retries with healthy ones
 
 **Default Nitter instances:**
+
 - nitter.net (official)
 - xcancel.com
 - nitter.privacyredirect.com
@@ -74,6 +83,7 @@ python search_nitter.py --headless search --query "test" --max-results 10
 See https://github.com/zedeus/nitter/wiki/Instances for the full list.
 
 **Environment variables:**
+
 - `NITTER_INSTANCES` - Comma-separated list of custom instances (optional)
 
 ## Installation
@@ -95,6 +105,7 @@ playwright install chromium
 **Default profile location:** `~/.x-discovery/chrome-profile`
 
 **Create the profile:**
+
 ```bash
 mkdir -p ~/.x-discovery/chrome-profile
 ```
@@ -102,12 +113,14 @@ mkdir -p ~/.x-discovery/chrome-profile
 The profile will be populated automatically on first run.
 
 **Why use a dedicated profile:**
+
 - Persists cookies and login sessions
 - Isolates automation from your main Chrome
 - Reduces detection by maintaining consistent browser fingerprint
 - Maintains state between script runs
 
 **Manual Chrome launch with profile:**
+
 ```bash
 # macOS
 /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
@@ -227,8 +240,10 @@ Trying instance: https://xcancel.com
 The script automatically rotates to healthy instances. If all fail:
 
 **Solutions:**
+
 1. **Check instance status**: https://github.com/zedeus/nitter/wiki/Instances
 2. **Set custom instances**:
+
    ```bash
    export NITTER_INSTANCES="https://nitter.net,https://xcancel.com"
    ```

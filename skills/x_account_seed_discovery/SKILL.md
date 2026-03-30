@@ -129,6 +129,7 @@ Nitter access uses Playwright with a persistent Chrome profile:
 - **Purpose:** Maintains cookies/session state across runs
 - **Benefits:** Reduces detection, improves reliability
 - **Creation:** Automatic on first run
+- **DNS:** Uses Google DNS over HTTPS (DoH) by default to bypass regional blocks
 
 ## Implementation Details
 
@@ -238,7 +239,9 @@ python skills/x_account_seed_discovery/scripts/search_news.py \
   --max-results 20
 
 # Search X via Nitter
+# IMPORTANT: Global flags (--headless, --no-stealth, etc.) MUST come BEFORE the subcommand
 python skills/x_account_seed_discovery/scripts/search_nitter.py \
+  --headless \
   search \
   --query "politics Indonesia" \
   --max-results 50
@@ -390,6 +393,19 @@ The skill aggressively filters opportunistic accounts that hijack trending topic
 - Run metadata always fresh
 
 ## Common Mistakes
+
+### ❌ Wrong: Global flags after subcommand
+```bash
+# ❌ BROKEN: --headless placed AFTER search subcommand
+python search_nitter.py search --query "test" --headless
+```
+Global flags (`--headless`, `--profile-dir`, `--no-stealth`) are defined on the root parser and **must come before** the `search`/`profile` subcommand. This is a standard argparse behavior.
+
+### ✅ Right: Correct argument order
+```bash
+# ✅ WORKS: Global flags BEFORE subcommand
+python search_nitter.py --headless search --query "test"
+```
 
 ### ❌ Wrong: Profile-only search
 Searching X profiles by bio keywords misses accounts that actually post about the topic.

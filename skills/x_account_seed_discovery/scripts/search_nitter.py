@@ -9,9 +9,14 @@ Features:
 - Persistent Chrome profile for session continuity
 
 Usage:
-    python search_nitter.py --query "politics Indonesia" --max-results 50
-    python search_nitter.py --profile prabowo --output profile.json
-    python search_nitter.py --search "mining policy" --max-results 100
+    python search_nitter.py [GLOBAL_FLAGS] search --query "politics Indonesia" --max-results 50
+    python search_nitter.py [GLOBAL_FLAGS] profile prabowo --output profile.json
+
+    IMPORTANT: Global flags (--headless, --profile-dir, --no-stealth, --delay-*) MUST be placed BEFORE the 'search' or 'profile' subcommand!
+
+Examples:
+    python search_nitter.py --headless search --query "politics Indonesia" --max-results 50
+    python search_nitter.py --no-stealth --delay-min 3 profile prabowo
 
 Environment:
     NITTER_INSTANCES - Comma-separated list of Nitter instances (optional)
@@ -35,7 +40,7 @@ from datetime import datetime
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright, Page, Browser, BrowserContext
-from playwright_stealth import Stealth
+from playwright_stealth import stealth_sync
 from bs4 import BeautifulSoup
 
 # Apply nest_asyncio to allow nested event loops (needed in some environments)
@@ -238,6 +243,12 @@ class NitterSearcher:
             "--disable-blink-features=AutomationControlled",
             "--disable-web-security",
             "--disable-features=IsolateOrigins,site-per-process",
+            # Use Google DNS over HTTPS (DoH) to bypass regional blocks
+            '--host-resolver-rules="MAP * 0.0.0.0, EXCLUDE *"',
+            "--dns-log-details",
+            "--enable-features=DnsOverHttps",
+            "--dns-over-https-mode=secure",
+            '--dns-over-https-servers="https://dns.google/dns-query{?dns}"',
         ]
 
         # Use persistent context with user data directory
@@ -337,8 +348,7 @@ class NitterSearcher:
         page = self.context.new_page()
 
         if self.stealth:
-            stealth = Stealth()
-            stealth.apply_stealth_sync(page)
+            stealth_sync(page)
 
         return page
 
@@ -811,16 +821,26 @@ def main():
         help=f"Path to Chrome profile directory (default: {DEFAULT_CHROME_PROFILE})",
     )
     parser.add_argument(
-        "--headless", action="store_true", help="Run headless (not recommended)"
+        "--headless",
+        action="store_true",
+        help="Run headless (not recommended). PLACE BEFORE subcommand!",
     )
     parser.add_argument(
-        "--no-stealth", action="store_true", help="Disable stealth mode"
+        "--no-stealth",
+        action="store_true",
+        help="Disable stealth mode. PLACE BEFORE subcommand!",
     )
     parser.add_argument(
-        "--delay-min", type=float, default=2.0, help="Min delay between actions"
+        "--delay-min",
+        type=float,
+        default=2.0,
+        help="Min delay between actions. PLACE BEFORE subcommand!",
     )
     parser.add_argument(
-        "--delay-max", type=float, default=5.0, help="Max delay between actions"
+        "--delay-max",
+        type=float,
+        default=5.0,
+        help="Max delay between actions. PLACE BEFORE subcommand!",
     )
 
     args = parser.parse_args()
