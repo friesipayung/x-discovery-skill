@@ -6,7 +6,7 @@ This directory contains Python scripts for searching news and X/Twitter profiles
 
 **News Search (HTTP-based):**
 
-- `search_news.py` - Uses DuckDuckGo (free) or SerpAPI (Google News, requires API key)
+- `search_news.py` - Uses DuckDuckGo (free), Serper.dev (Google News, requires API key, recommended), or SerpAPI (Google News, requires API key)
 - No browser automation needed
 
 **X/Twitter Access (Browser-based):**
@@ -19,13 +19,17 @@ This directory contains Python scripts for searching news and X/Twitter profiles
 
 ### 1. search_news.py
 
-Search news articles using DuckDuckGo (free) or SerpAPI (Google News).
+Search news articles using DuckDuckGo (free), Serper.dev (Google News), or SerpAPI (Google News).
 
 **Usage:**
 
 ```bash
 # DuckDuckGo (free, no API key)
 python search_news.py --topic "politics" --region "Indonesia" --max-results 20
+
+# Serper.dev Google News (requires API key - recommended, cheaper)
+export SERPER_API_KEY="your_key_here"
+python search_news.py --topic "politics" --region "Indonesia" --provider serper --max-results 20
 
 # SerpAPI Google News (requires API key)
 export SERPAPI_KEY="your_key_here"
@@ -38,6 +42,7 @@ python search_news.py --topic "mining policy" --region "Indonesia" --output news
 **Features:**
 
 - DuckDuckGo: Free, no API keys needed
+- Serper.dev: Google News access (requires API key from https://serper.dev) - cheaper than SerpAPI
 - SerpAPI: Google News access (requires API key from https://serpapi.com)
 - Parses article titles, URLs, sources, and snippets
 - Respects rate limits with configurable delays

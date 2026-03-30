@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 News Search Script for X Account Seed Discovery
-Searches news articles using DuckDuckGo (free) or SerpAPI Google News (API key required)
+Searches news articles using DuckDuckGo (free), SerpAPI Google News (API key required), or Serper.dev (API key required)
 
 Usage:
     # DuckDuckGo (free, no API key)
@@ -10,10 +10,14 @@ Usage:
     # SerpAPI Google News (requires API key)
     python search_news.py --topic "politics" --region "Indonesia" --provider serpapi --max-results 20
 
+    # Serper.dev (requires API key - recommended, cheaper than SerpAPI)
+    python search_news.py --topic "politics" --region "Indonesia" --provider serper --max-results 20
+
     python search_news.py --topic "mining policy" --region "Indonesia" --output news.json
 
 Environment:
     SERPAPI_KEY - Required for SerpAPI provider (get from https://serpapi.com)
+    SERPER_API_KEY - Required for Serper provider (get from https://serper.dev)
 """
 
 import argparse
@@ -192,6 +196,84 @@ class SerpAPINewsSearcher:
             except json.JSONDecodeError as e:
                 print(f"Error parsing response: {e}", file=sys.stderr)
                 break
+
+        return articles[:max_results]
+
+
+class SerperNewsSearcher:
+    """Search news using Serper.dev Google News API."""
+
+    BASE_URL = "https://google.serper.dev/news"
+
+    def __init__(self, api_key: Optional[str] = None, delay: float = 1.0):
+        """
+        Initialize searcher.
+
+        Args:
+            api_key: Serper API key (or from SERPER_API_KEY env var)
+            delay: Delay between requests in seconds
+        """
+        self.api_key = api_key or os.environ.get("SERPER_API_KEY")
+        if not self.api_key:
+            raise ValueError(
+                "Serper API key required. Set SERPER_API_KEY env var or pass api_key parameter. Get key from https://serper.dev"
+            )
+        self.delay = delay
+        self.session = requests.Session()
+        self.session.headers.update(
+            {
+                "X-API-KEY": self.api_key,
+                "Content-Type": "application/json",
+            }
+        )
+
+    def search(
+        self, query: str, max_results: int = 20, gl: str = "id", hl: str = "id"
+    ) -> List[NewsArticle]:
+        """
+        Search for news articles using Google News via Serper.dev.
+
+        Args:
+            query: Search query
+            max_results: Maximum number of results to return
+            gl: Country code for search (default: 'id' for Indonesia)
+            hl: Language code for search (default: 'id' for Indonesian)
+
+        Returns:
+            List of NewsArticle objects
+        """
+        articles = []
+
+        try:
+            payload = {
+                "q": query,
+                "gl": gl,
+                "hl": hl,
+            }
+
+            response = self.session.post(self.BASE_URL, json=payload, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+
+            # Parse news results from Serper response
+            # Serper returns results in 'news' array
+            news_results = data.get("news", [])
+            for item in news_results[:max_results]:
+                article = NewsArticle(
+                    title=item.get("title", ""),
+                    url=item.get("link", ""),
+                    source=item.get("source", "Unknown"),
+                    snippet=item.get("snippet", ""),
+                    published_at=item.get("date", None),
+                )
+                articles.append(article)
+
+            time.sleep(self.delay)
+
+        except requests.RequestException as e:
+            print(f"Error searching news: {e}", file=sys.stderr)
+        except json.JSONDecodeError as e:
+            print(f"Error parsing response: {e}", file=sys.stderr)
 
         return articles[:max_results]
 
@@ -380,7 +462,7 @@ def search_news(
         topic: Topic to search for
         region: Geographic region
         max_results: Maximum results to return
-        provider: News provider ('duckduckgo' or 'serpapi')
+        provider: News provider ('duckduckgo', 'serpapi', or 'serper')
         verify_ssl: Whether to verify SSL certificates (DuckDuckGo only)
 
     Returns:
@@ -390,6 +472,8 @@ def search_news(
 
     if provider == "serpapi":
         searcher = SerpAPINewsSearcher(delay=1.0)
+    elif provider == "serper":
+        searcher = SerperNewsSearcher(delay=1.0)
     else:
         searcher = DuckDuckGoNewsSearcher(delay=1.0, verify_ssl=verify_ssl)
 
@@ -435,9 +519,9 @@ def main():
     )
     parser.add_argument(
         "--provider",
-        choices=["duckduckgo", "serpapi"],
+        choices=["duckduckgo", "serpapi", "serper"],
         default="duckduckgo",
-        help="News provider: duckduckgo (free) or serpapi (requires API key)",
+        help="News provider: duckduckgo (free), serpapi (requires API key), or serper (requires API key, cheaper)",
     )
 
     args = parser.parse_args()
@@ -452,6 +536,8 @@ def main():
     try:
         if args.provider == "serpapi":
             searcher = SerpAPINewsSearcher(delay=args.delay)
+        elif args.provider == "serper":
+            searcher = SerperNewsSearcher(delay=args.delay)
         else:
             searcher = DuckDuckGoNewsSearcher(
                 delay=args.delay, verify_ssl=not args.no_verify_ssl

@@ -170,6 +170,7 @@ Before using this skill, ensure you have:
 
 **News Search (HTTP-based):**
 - Uses DuckDuckGo HTML interface (free, no API key)
+- Optional: Serper.dev for Google News (requires API key, cheaper than SerpAPI)
 - Optional: SerpAPI for Google News (requires API key)
 - No browser automation needed
 
@@ -195,7 +196,10 @@ sqlite3 ~/.x-discovery/seed.sql < skills/x_account_seed_discovery/sql/schema.sql
 export SQLITE_PATH="$HOME/.x-discovery/seed.sql"
 export DEFAULT_REGION="Indonesia"
 
-# Optional: For SerpAPI Google News (instead of DuckDuckGo)
+# Optional: For Serper.dev Google News (recommended, cheaper than SerpAPI)
+export SERPER_API_KEY="your_serper_key"
+
+# Optional: For SerpAPI Google News (requires API key)
 export SERPAPI_KEY="your_serpapi_key"
 
 # Optional: Custom Nitter instances (defaults provided)
@@ -240,10 +244,24 @@ opencode run skill x_account_seed_discovery --input '{
 
 **Direct script execution:**
 ```bash
-# Search news
+# Search news with DuckDuckGo (free)
 python skills/x_account_seed_discovery/scripts/search_news.py \
   --topic "politics" \
   --region "Indonesia" \
+  --max-results 20
+
+# Search news with Serper.dev (requires API key, recommended)
+python skills/x_account_seed_discovery/scripts/search_news.py \
+  --topic "politics" \
+  --region "Indonesia" \
+  --provider serper \
+  --max-results 20
+
+# Search news with SerpAPI (requires API key)
+python skills/x_account_seed_discovery/scripts/search_news.py \
+  --topic "politics" \
+  --region "Indonesia" \
+  --provider serpapi \
   --max-results 20
 
 # Search news with SSL verification disabled (if you get certificate errors)
