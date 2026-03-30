@@ -81,9 +81,15 @@ class TwStalkerSearcher:
     MAX_RETRIES = 3
     BACKOFF_BASE = 2.0  # Base for exponential backoff
 
-    def __init__(self, headless: bool = False, delay_range: tuple = (3, 7)):
+    def __init__(
+        self,
+        headless: bool = False,
+        delay_range: tuple = (3, 7),
+        enrich_profiles: bool = True,
+    ):
         self.headless = headless
         self.delay_range = delay_range
+        self.enrich_profiles = enrich_profiles
         self._playwright = None
         self.context = None
         self._last_request_time = None
@@ -319,25 +325,56 @@ class TwStalkerSearcher:
                         time.sleep(backoff)
                         continue
 
-                # Parse results
+                # Parse results - extract handles from tweets
                 html = page.content()
-                profiles = self._parse_search_results(html, max_results)
+                handles = self._extract_handles_from_search(html)
 
                 # Try to load more results if available
-                if len(profiles) < max_results:
-                    additional_profiles = self._load_more_results(
-                        page, max_results - len(profiles)
+                if len(handles) < max_results:
+                    additional_handles = self._load_more_handles(
+                        page, max_results - len(handles)
                     )
-                    profiles.extend(additional_profiles)
+                    handles.extend(additional_handles)
 
-                # Remove duplicates based on handle
-                seen_handles = set()
-                unique_profiles = []
-                for profile in profiles:
-                    if profile.handle not in seen_handles:
-                        seen_handles.add(profile.handle)
-                        unique_profiles.append(profile)
-                profiles = unique_profiles
+                # Remove duplicates
+                handles = list(
+                    dict.fromkeys(handles)
+                )  # Preserves order, removes duplicates
+                handles = handles[:max_results]
+
+                print(f"  Found {len(handles)} unique handles from search")
+
+                # Visit each profile page to get full details (if enrichment enabled)
+                profiles = []
+                if self.enrich_profiles:
+                    for i, handle in enumerate(handles):
+                        print(f"  [{i + 1}/{len(handles)}] Fetching profile: @{handle}")
+                        profile = self.get_profile(handle)
+                        if profile:
+                            profiles.append(profile)
+                            print(
+                                f"    ✓ Got profile: {profile.display_name} ({profile.followers_count} followers)"
+                            )
+                        else:
+                            print(f"    ✗ Failed to get profile for @{handle}")
+                else:
+                    # Quick mode: create basic profiles from handles only
+                    print(f"  Quick mode: Skipping profile enrichment")
+                    for handle in handles:
+                        profiles.append(
+                            XProfile(
+                                handle=handle,
+                                display_name=handle,
+                                bio="",
+                                followers_count=0,
+                                following_count=0,
+                                posts_count=0,
+                                location="",
+                                website="",
+                                joined_date="",
+                                is_verified=False,
+                            )
+                        )
 
                 page.close()
 
@@ -359,18 +396,62 @@ class TwStalkerSearcher:
 
         return profiles[:max_results]
 
-    def _load_more_results(self, page, remaining_slots: int) -> List[XProfile]:
+    def _extract_handles_from_search(self, html: str) -> List[str]:
         """
-        Click 'Load more' buttons to get additional results.
+        Extract unique Twitter handles from TwStalker search page HTML.
+
+        TwStalker search shows tweets, and we extract the authors.
+        """
+        soup = BeautifulSoup(html, "lxml")
+        handles = []
+
+        # Method 1: Look for links to user profiles in tweets
+        # Pattern: <a href="/@username"> or <a href="/username">
+        user_links = soup.find_all("a", href=re.compile(r"^/[@]?[a-zA-Z0-9_]+$"))
+        for link in user_links:
+            href = link.get("href", "").strip("/").lstrip("@")
+            # Filter out common non-user paths
+            if href and href not in [
+                "search",
+                "about",
+                "privacy",
+                "terms",
+                "login",
+                "signup",
+            ]:
+                if len(href) > 1:  # Avoid single char handles which are likely not real
+                    handles.append(href.lower())
+
+        # Method 2: Look for @mentions in tweet text
+        tweet_texts = soup.find_all(text=re.compile(r"@[a-zA-Z0-9_]+"))
+        for text in tweet_texts:
+            mentions = re.findall(r"@([a-zA-Z0-9_]+)", str(text))
+            for mention in mentions:
+                if mention.lower() not in [h.lower() for h in handles]:
+                    handles.append(mention.lower())
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_handles = []
+        for h in handles:
+            if h not in seen:
+                seen.add(h)
+                unique_handles.append(h)
+
+        return unique_handles
+
+    def _load_more_handles(self, page, remaining_slots: int) -> List[str]:
+        """
+        Click 'Load more' buttons to get additional handles.
 
         TwStalker uses: <a class="add-nw-event" data-cursor="...">
         When clicked, renders additional content at the bottom.
         """
-        additional_profiles = []
+        additional_handles = []
         max_load_more_clicks = 10  # Prevent infinite loops
 
         for click_attempt in range(max_load_more_clicks):
-            if len(additional_profiles) >= remaining_slots:
+            if len(additional_handles) >= remaining_slots:
                 break
 
             # Find load more button
@@ -383,9 +464,9 @@ class TwStalkerSearcher:
                 break
 
             try:
-                # Get current profile count to detect new content
+                # Get current handles to detect new content
                 current_html = page.content()
-                current_count = len(self._parse_search_results(current_html, 9999))
+                current_handles = set(self._extract_handles_from_search(current_html))
 
                 # Click the load more button
                 print(f"  Clicking 'Load more' button (attempt {click_attempt + 1})...")
@@ -397,26 +478,28 @@ class TwStalkerSearcher:
 
                 # Check if new content was added
                 new_html = page.content()
-                new_profiles = self._parse_search_results(new_html, 9999)
-                new_count = len(new_profiles)
+                new_handles = self._extract_handles_from_search(new_html)
+                new_handles_set = set(new_handles)
 
-                if new_count > current_count:
-                    # Extract only the newly added profiles
-                    newly_added = new_profiles[current_count:]
-                    slots_available = remaining_slots - len(additional_profiles)
-                    additional_profiles.extend(newly_added[:slots_available])
+                # Find newly added handles
+                newly_added = list(new_handles_set - current_handles)
+
+                if newly_added:
+                    slots_available = remaining_slots - len(additional_handles)
+                    to_add = newly_added[:slots_available]
+                    additional_handles.extend(to_add)
                     print(
-                        f"    ✓ Loaded {len(newly_added)} more profiles (total: {len(additional_profiles)}/{remaining_slots})"
+                        f"    ✓ Loaded {len(to_add)} more handles (total: {len(additional_handles)}/{remaining_slots})"
                     )
                 else:
-                    print(f"    No new profiles loaded")
+                    print(f"    No new handles loaded")
                     break
 
             except Exception as e:
                 print(f"    Error clicking load more: {e}")
                 break
 
-        return additional_profiles
+        return additional_handles
 
     def _parse_search_results(self, html: str, max_results: int) -> List[XProfile]:
         """Parse search results from TwStalker HTML."""
@@ -698,6 +781,11 @@ def main():
         "--max-results", "-n", type=int, default=50, help="Max profiles to collect"
     )
     search_parser.add_argument("--output", "-o", help="Output JSON file")
+    search_parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Quick mode: skip profile enrichment (faster)",
+    )
 
     # Profile command
     profile_parser = subparsers.add_parser("profile", help="Get profile info")
@@ -728,10 +816,13 @@ def main():
         return 1
 
     delay_range = (args.delay_min, args.delay_max)
+    enrich_profiles = not getattr(args, "quick", False)
 
     try:
         with TwStalkerSearcher(
-            headless=args.headless, delay_range=delay_range
+            headless=args.headless,
+            delay_range=delay_range,
+            enrich_profiles=enrich_profiles,
         ) as searcher:
             if args.command == "search":
                 print(f"Searching profiles: '{args.query}'")
