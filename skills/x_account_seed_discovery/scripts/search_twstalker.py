@@ -98,7 +98,9 @@ class TwStalkerSearcher:
         self.close()
 
     def _init_browser(self):
-        """Initialize browser."""
+        """Initialize browser with proper profile directory."""
+        import tempfile
+
         self._playwright = sync_playwright().start()
 
         args = [
@@ -106,13 +108,16 @@ class TwStalkerSearcher:
             "--disable-web-security",
         ]
 
+        # Use a proper temp directory for persistent context
+        profile_dir = tempfile.mkdtemp(prefix="twstalker_profile_")
+
         self.context = self._playwright.chromium.launch_persistent_context(
-            user_data_dir="",
+            user_data_dir=profile_dir,
             headless=self.headless,
             args=args,
             viewport={"width": 1920, "height": 1080},
         )
-        print(f"Browser initialized (headless={self.headless})")
+        print(f"Browser initialized (headless={self.headless}, profile={profile_dir})")
 
     def _create_page(self) -> Page:
         """Create a new page with stealth mode."""
@@ -149,20 +154,22 @@ class TwStalkerSearcher:
         html = page.content()
         title = page.title()
 
-        # Common rate limit indicators
-        indicators = [
-            "rate limit" in html.lower(),
-            "too many requests" in html.lower(),
-            "just a moment" in title.lower(),
-            "checking your browser" in html.lower(),
-            "cloudflare" in html.lower(),
-            "429" in title.lower(),
-            "503" in title.lower(),
-            page.locator('text="Please try again later"').count() > 0,
-            page.locator('text="Too many requests"').count() > 0,
-        ]
+        # Common rate limit indicators - more specific to avoid false positives
+        indicators = {
+            "rate_limit_text": "rate limit" in html.lower(),
+            "too_many_requests": "too many requests" in html.lower(),
+            "just_a_moment_title": "just a moment" in title.lower(),
+            "checking_browser": "checking your browser" in html.lower(),
+            # Only count cloudflare if it's a challenge page, not just mentioned in HTML
+            "cloudflare_challenge": "just a moment" in title.lower()
+            and "cloudflare" in html.lower(),
+            "429_error": "429" in title.lower(),
+            "503_error": "503" in title.lower(),
+            "error_title": "error" in title.lower()
+            and title.lower() not in ["top tweets", "twitter profile"],
+        }
 
-        if any(indicators):
+        if any(indicators.values()):
             self._rate_limit_hits += 1
             return True
         return False
@@ -248,7 +255,8 @@ class TwStalkerSearcher:
         """
         Search for profiles on TwStalker with rate limit respect.
 
-        TwStalker search URL pattern: https://w.twstalker.com/search/?q={query}
+        TwStalker search URL pattern: https://w.twstalker.com/search/<keywords>
+        Example: https://w.twstalker.com/search/kebijakan
         """
         if not self.context:
             self._init_browser()
@@ -263,8 +271,9 @@ class TwStalkerSearcher:
                 page = self._create_page()
 
                 # Navigate to search page
-                encoded_query = query.replace(" ", "+")
-                url = f"{self.BASE_URL}/search/?q={encoded_query}"
+                # TwStalker URL pattern: https://w.twstalker.com/search/<keywords>
+                encoded_query = query.replace(" ", "%20")
+                url = f"{self.BASE_URL}/search/{encoded_query}"
 
                 print(f"Searching TwStalker: {url}")
 

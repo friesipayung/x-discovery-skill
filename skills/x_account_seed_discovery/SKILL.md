@@ -109,6 +109,7 @@ The skill uses multiple Nitter instances with automatic load balancing and rate 
 NITTER_INSTANCES = [
     "https://nitter.net",
     "https://nitter.privacyredirect.com",
+    "https://w.twstalker.com",  # Alternative X viewer
 ]
 ```
 
@@ -120,6 +121,10 @@ NITTER_INSTANCES = [
 - ❌ `nitter.poast.org` (Always returns 403)
 - ❌ `nitter.tiekoetter.com` (Blocks automation/scraping)
 - ❌ `nitter.catsarch.com` (Not working)
+
+**Alternative X Viewers:**
+- **TwStalker** (`w.twstalker.com`) - Often more reliable than Nitter, provides public profile viewing
+- Can be added via `NITTER_INSTANCES` env var for automatic load balancing
 
 See [Nitter Instances Wiki](https://github.com/zedeus/nitter/wiki/Instances) for the full list.
 
