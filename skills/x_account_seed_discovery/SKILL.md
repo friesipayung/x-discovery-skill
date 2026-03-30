@@ -143,6 +143,42 @@ export DEFAULT_REGION="Indonesia"
 - **Claude Code** - Use `@x_account_seed_discovery` with natural language parameters
 - **Opencode** - Use `opencode run skill x_account_seed_discovery` with JSON input
 - **Custom agentic tools** - Import and call with structured input/output
+- **Playwright Agent Mode** - Use agent instructions for direct browser control
+
+### Using Playwright (Agent Mode)
+
+For agents (Claude Code, Opencode) that can run Playwright directly, use the agent instructions in `agent-instructions/`:
+
+**Agent Instructions Available:**
+- `agent-instructions/PLAYWRIGHT_GUIDE.md` - Complete Playwright usage guide
+- `agent-instructions/QUICK_REFERENCE.md` - One-liners and selectors
+- `agent-instructions/EXAMPLE_WORKFLOW.md` - Step-by-step execution example
+
+**Key Features:**
+- **Stealth Mode**: Uses `playwright-stealth` to avoid detection on X.com
+- **No API Keys**: Can use DuckDuckGo (free) instead of paid news APIs
+- **Direct Browser Control**: Agent controls browser to search and extract data
+- **Anti-Detection**: Random delays, human-like scrolling, custom user agents
+
+**When to Use Agent Mode:**
+- You want to avoid API costs
+- You need more control over the search process
+- You're running in an environment with Playwright available
+- You want to use stealth mode for X searches
+
+**Quick Agent Command:**
+```
+@x_account_seed_discovery Use Playwright with stealth mode to search news 
+and X profiles for topic="politics" region="Indonesia"
+```
+
+The agent will:
+1. Read the agent instructions
+2. Use Playwright to search Google News
+3. Extract keywords from articles
+4. Use Playwright with stealth to search X.com
+5. Aggregate accounts and evaluate with AI
+6. Save results to SQLite
 
 ### 3. Run Discovery
 
