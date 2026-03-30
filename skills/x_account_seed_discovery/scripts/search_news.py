@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
 News Search Script for X Account Seed Discovery
-Searches news articles using DuckDuckGo (free), SerpAPI Google News (API key required), or Serper.dev (API key required)
+Searches news articles using Serper.dev (default, requires API key), SerpAPI (requires API key), or DuckDuckGo (free)
 
 Usage:
-    # DuckDuckGo (free, no API key)
+    # Serper.dev (default, requires API key - recommended, cheapest)
     python search_news.py --topic "politics" --region "Indonesia" --max-results 20
 
     # SerpAPI Google News (requires API key)
     python search_news.py --topic "politics" --region "Indonesia" --provider serpapi --max-results 20
 
-    # Serper.dev (requires API key - recommended, cheaper than SerpAPI)
-    python search_news.py --topic "politics" --region "Indonesia" --provider serper --max-results 20
+    # DuckDuckGo (free, no API key)
+    python search_news.py --topic "politics" --region "Indonesia" --provider duckduckgo --max-results 20
 
     python search_news.py --topic "mining policy" --region "Indonesia" --output news.json
 
 Environment:
+    SERPER_API_KEY - Required for Serper provider, default (get from https://serper.dev)
     SERPAPI_KEY - Required for SerpAPI provider (get from https://serpapi.com)
-    SERPER_API_KEY - Required for Serper provider (get from https://serper.dev)
 """
 
 import argparse
@@ -520,8 +520,8 @@ def main():
     parser.add_argument(
         "--provider",
         choices=["duckduckgo", "serpapi", "serper"],
-        default="duckduckgo",
-        help="News provider: duckduckgo (free), serpapi (requires API key), or serper (requires API key, cheaper)",
+        default="serper",
+        help="News provider: serper (requires API key, default), serpapi (requires API key), or duckduckgo (free)",
     )
 
     args = parser.parse_args()
@@ -534,14 +534,15 @@ def main():
     query = f"{args.topic} {args.region}"
 
     try:
-        if args.provider == "serpapi":
-            searcher = SerpAPINewsSearcher(delay=args.delay)
-        elif args.provider == "serper":
-            searcher = SerperNewsSearcher(delay=args.delay)
-        else:
+        if args.provider == "duckduckgo":
             searcher = DuckDuckGoNewsSearcher(
                 delay=args.delay, verify_ssl=not args.no_verify_ssl
             )
+        elif args.provider == "serpapi":
+            searcher = SerpAPINewsSearcher(delay=args.delay)
+        else:
+            # Default: serper
+            searcher = SerperNewsSearcher(delay=args.delay)
         articles = searcher.search(query, args.max_results)
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)

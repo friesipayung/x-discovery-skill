@@ -160,7 +160,7 @@ export DEFAULT_REGION="Indonesia"
 
 Before using this skill, ensure you have:
 - **SQLite 3.x** installed on your system
-- **News search provider** access (DuckDuckGo free, or SerpAPI for Google News)
+- **Serper API key** for news search (get from https://serper.dev)
 - **Playwright** installed for Nitter access (`pip install playwright playwright-stealth`)
 - **Chrome profile** created at `~/.x-discovery/chrome-profile`
 - **This skill repository** cloned or downloaded locally
@@ -169,9 +169,9 @@ Before using this skill, ensure you have:
 ### Architecture
 
 **News Search (HTTP-based):**
-- Uses DuckDuckGo HTML interface (free, no API key)
-- Optional: Serper.dev for Google News (requires API key, cheaper than SerpAPI)
-- Optional: SerpAPI for Google News (requires API key)
+- **Default:** Serper.dev for Google News (requires API key, get from https://serper.dev)
+- Optional: SerpAPI for Google News (requires API key, more expensive)
+- Optional: DuckDuckGo (free, no API key) - use `--provider duckduckgo` flag
 - No browser automation needed
 
 **X/Twitter Access (Browser-based):**
@@ -196,10 +196,10 @@ sqlite3 ~/.x-discovery/seed.sql < skills/x_account_seed_discovery/sql/schema.sql
 export SQLITE_PATH="$HOME/.x-discovery/seed.sql"
 export DEFAULT_REGION="Indonesia"
 
-# Optional: For Serper.dev Google News (recommended, cheaper than SerpAPI)
+# Required: For Serper.dev Google News (default provider, get key from https://serper.dev)
 export SERPER_API_KEY="your_serper_key"
 
-# Optional: For SerpAPI Google News (requires API key)
+# Optional: For SerpAPI Google News (requires API key, more expensive)
 export SERPAPI_KEY="your_serpapi_key"
 
 # Optional: Custom Nitter instances (defaults provided)
@@ -244,32 +244,33 @@ opencode run skill x_account_seed_discovery --input '{
 
 **Direct script execution:**
 ```bash
-# Search news with DuckDuckGo (free)
+# Search news with Serper.dev (default, requires API key)
 python skills/x_account_seed_discovery/scripts/search_news.py \
   --topic "politics" \
   --region "Indonesia" \
   --max-results 20
 
-# Search news with Serper.dev (requires API key, recommended)
-python skills/x_account_seed_discovery/scripts/search_news.py \
-  --topic "politics" \
-  --region "Indonesia" \
-  --provider serper \
-  --max-results 20
-
-# Search news with SerpAPI (requires API key)
+# Search news with SerpAPI (requires API key, more expensive)
 python skills/x_account_seed_discovery/scripts/search_news.py \
   --topic "politics" \
   --region "Indonesia" \
   --provider serpapi \
   --max-results 20
 
-# Search news with SSL verification disabled (if you get certificate errors)
+# Search news with DuckDuckGo (free, no API key)
+python skills/x_account_seed_discovery/scripts/search_news.py \
+  --topic "politics" \
+  --region "Indonesia" \
+  --provider duckduckgo \
+  --max-results 20
+
+# Search news with SSL verification disabled (if you get certificate errors with DuckDuckGo)
 python skills/x_account_seed_discovery/scripts/search_news.py \
   --topic "politics" \
   --region "Indonesia" \
   --max-results 20 \
-  --no-verify-ssl
+  --no-verify-ssl \
+  --provider duckduckgo
 
 # Search X via Nitter
 # IMPORTANT: Global flags (--headless, --no-stealth, etc.) MUST come BEFORE the subcommand
