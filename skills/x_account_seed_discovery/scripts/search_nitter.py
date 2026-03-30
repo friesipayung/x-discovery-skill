@@ -468,7 +468,24 @@ class NitterSearcher:
                 # Check if more content loaded
                 new_height = page.evaluate("document.body.scrollHeight")
                 if new_height == last_height:
-                    scroll_attempts += 1
+                    # Page height didn't change - try clicking "Load more" button
+                    show_more = page.locator(
+                        "a.show-more, button.show-more, .show-more"
+                    ).first
+                    if show_more.count() > 0 and show_more.is_visible():
+                        print("Clicking 'Load more' button...")
+                        show_more.click()
+                        time.sleep(2)  # Wait for content to load
+                        self._random_delay()
+                        # Check height again after clicking
+                        new_height = page.evaluate("document.body.scrollHeight")
+                        if new_height == last_height:
+                            scroll_attempts += 1
+                        else:
+                            scroll_attempts = 0
+                            last_height = new_height
+                    else:
+                        scroll_attempts += 1
                 else:
                     scroll_attempts = 0
                     last_height = new_height
