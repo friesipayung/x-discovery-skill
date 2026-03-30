@@ -104,18 +104,18 @@ The skill uses multiple Nitter instances with automatic load balancing and rate 
 ```python
 NITTER_INSTANCES = [
     "https://nitter.net",
-    "https://xcancel.com",
-    "https://nitter.poast.org",
     "https://nitter.privacyredirect.com",
     "https://nitter.tiekoetter.com",
     "https://nitter.catsarch.com",
 ]
 ```
 
-✅ **All Cloudflare-protected instances removed:**
+✅ **Removed non-working instances:**
+- ❌ `xcancel.com` (Cloudflare)
 - ❌ `lightbrd.com` (Cloudflare)
 - ❌ `nitter.space` (Cloudflare + Ads)
 - ❌ `nuku.trabun.org` (Cloudflare)
+- ❌ `nitter.poast.org` (Always returns 403)
 
 See [Nitter Instances Wiki](https://github.com/zedeus/nitter/wiki/Instances) for the full list.
 
