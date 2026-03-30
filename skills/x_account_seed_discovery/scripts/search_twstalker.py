@@ -74,15 +74,21 @@ class XProfile:
 
 
 class TwStalkerSearcher:
-    """Search X/Twitter via TwStalker using Playwright."""
+    """Search X/Twitter via TwStalker using Playwright with rate limit respect."""
 
     BASE_URL = "https://w.twstalker.com"
+    MIN_REQUEST_INTERVAL = 5.0  # Minimum seconds between requests
+    MAX_RETRIES = 3
+    BACKOFF_BASE = 2.0  # Base for exponential backoff
 
-    def __init__(self, headless: bool = False, delay_range: tuple = (2, 5)):
+    def __init__(self, headless: bool = False, delay_range: tuple = (3, 7)):
         self.headless = headless
         self.delay_range = delay_range
         self._playwright = None
         self.context = None
+        self._last_request_time = None
+        self._request_count = 0
+        self._rate_limit_hits = 0
 
     def __enter__(self):
         self._init_browser()
@@ -115,46 +121,120 @@ class TwStalkerSearcher:
         return page
 
     def _random_delay(self):
-        """Random delay to mimic human behavior."""
+        """Random delay with jitter to mimic human behavior and avoid patterns."""
         import random
 
         delay = random.uniform(*self.delay_range)
-        time.sleep(delay)
+        # Add jitter (±20% variation)
+        jitter = delay * random.uniform(-0.2, 0.2)
+        total_delay = delay + jitter
+        time.sleep(max(0.5, total_delay))
+
+    def _enforce_rate_limit(self):
+        """Enforce minimum time between requests to respect rate limits."""
+        if self._last_request_time is not None:
+            elapsed = time.time() - self._last_request_time
+            if elapsed < self.MIN_REQUEST_INTERVAL:
+                wait_time = self.MIN_REQUEST_INTERVAL - elapsed
+                print(f"  [Rate limit] Waiting {wait_time:.1f}s before next request...")
+                time.sleep(wait_time)
+        self._last_request_time = time.time()
+        self._request_count += 1
+
+    def _handle_rate_limit_response(self, page) -> bool:
+        """
+        Check if page shows rate limit/blocking indicators.
+        Returns True if rate limited, False if OK.
+        """
+        html = page.content()
+        title = page.title()
+
+        # Common rate limit indicators
+        indicators = [
+            "rate limit" in html.lower(),
+            "too many requests" in html.lower(),
+            "just a moment" in title.lower(),
+            "checking your browser" in html.lower(),
+            "cloudflare" in html.lower(),
+            "429" in title.lower(),
+            "503" in title.lower(),
+            page.locator('text="Please try again later"').count() > 0,
+            page.locator('text="Too many requests"').count() > 0,
+        ]
+
+        if any(indicators):
+            self._rate_limit_hits += 1
+            return True
+        return False
+
+    def _exponential_backoff(self, attempt: int) -> float:
+        """Calculate exponential backoff delay."""
+        import random
+
+        base = self.BACKOFF_BASE**attempt
+        jitter = random.uniform(0, 1)
+        return base + jitter
 
     def search_profiles(self, query: str, max_results: int = 50) -> List[XProfile]:
         """
-        Search for profiles on TwStalker.
+        Search for profiles on TwStalker with rate limit respect.
 
         TwStalker search URL pattern: https://w.twstalker.com/search/?q={query}
         """
         if not self.context:
             self._init_browser()
 
-        page = self._create_page()
         profiles = []
 
-        try:
-            # Navigate to search page
-            encoded_query = query.replace(" ", "+")
-            url = f"{self.BASE_URL}/search/?q={encoded_query}"
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                # Enforce rate limit before request
+                self._enforce_rate_limit()
 
-            print(f"Searching TwStalker: {url}")
+                page = self._create_page()
 
-            page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            time.sleep(3)
-            self._random_delay()
+                # Navigate to search page
+                encoded_query = query.replace(" ", "+")
+                url = f"{self.BASE_URL}/search/?q={encoded_query}"
 
-            # Parse results
-            html = page.content()
-            profiles = self._parse_search_results(html, max_results)
+                print(f"Searching TwStalker: {url}")
 
-        except Exception as e:
-            print(f"Error searching: {e}", file=sys.stderr)
+                page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                time.sleep(3)
+                self._random_delay()
 
-        finally:
-            page.close()
+                # Check for rate limiting
+                if self._handle_rate_limit_response(page):
+                    backoff = self._exponential_backoff(attempt)
+                    print(
+                        f"⚠️ Rate limited or blocked. Backing off for {backoff:.1f}s..."
+                    )
+                    page.close()
+                    time.sleep(backoff)
+                    continue
 
-        print(f"Found {len(profiles)} profiles")
+                # Parse results
+                html = page.content()
+                profiles = self._parse_search_results(html, max_results)
+
+                page.close()
+
+                if profiles:
+                    print(f"✓ Found {len(profiles)} profiles")
+                    break
+                else:
+                    print(f"⚠️ No profiles found on attempt {attempt + 1}")
+
+            except Exception as e:
+                print(f"Error on attempt {attempt + 1}: {e}", file=sys.stderr)
+                if attempt < self.MAX_RETRIES - 1:
+                    backoff = self._exponential_backoff(attempt)
+                    print(f"Retrying in {backoff:.1f}s...")
+                    time.sleep(backoff)
+                else:
+                    print(f"Max retries reached. Giving up.")
+                    break
+
         return profiles[:max_results]
 
     def _parse_search_results(self, html: str, max_results: int) -> List[XProfile]:
@@ -243,33 +323,57 @@ class TwStalkerSearcher:
         return profiles
 
     def get_profile(self, handle: str) -> Optional[XProfile]:
-        """Get detailed profile information."""
+        """Get detailed profile information with rate limit respect."""
         if not self.context:
             self._init_browser()
 
-        page = self._create_page()
         profile = None
 
-        try:
-            handle = handle.strip().lstrip("@").lower()
-            url = f"{self.BASE_URL}/{handle}"
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                # Enforce rate limit before request
+                self._enforce_rate_limit()
 
-            print(f"Fetching profile: {url}")
-            page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            time.sleep(3)
-            self._random_delay()
+                page = self._create_page()
 
-            html = page.content()
-            profile = self._parse_profile(html, handle)
+                handle = handle.strip().lstrip("@").lower()
+                url = f"{self.BASE_URL}/{handle}"
 
-            if profile:
-                print(f"Found profile: @{profile.handle}")
+                print(f"Fetching profile: {url}")
+                page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                time.sleep(3)
+                self._random_delay()
 
-        except Exception as e:
-            print(f"Error fetching profile: {e}", file=sys.stderr)
+                # Check for rate limiting
+                if self._handle_rate_limit_response(page):
+                    backoff = self._exponential_backoff(attempt)
+                    print(
+                        f"⚠️ Rate limited or blocked. Backing off for {backoff:.1f}s..."
+                    )
+                    page.close()
+                    time.sleep(backoff)
+                    continue
 
-        finally:
-            page.close()
+                html = page.content()
+                profile = self._parse_profile(html, handle)
+
+                if profile:
+                    print(f"✓ Found profile: @{profile.handle}")
+                    page.close()
+                    break
+                else:
+                    print(f"⚠️ Profile not found on attempt {attempt + 1}")
+                    page.close()
+
+            except Exception as e:
+                print(f"Error on attempt {attempt + 1}: {e}", file=sys.stderr)
+                if attempt < self.MAX_RETRIES - 1:
+                    backoff = self._exponential_backoff(attempt)
+                    print(f"Retrying in {backoff:.1f}s...")
+                    time.sleep(backoff)
+                else:
+                    print(f"Max retries reached. Giving up.")
+                    break
 
         return profile
 
@@ -356,6 +460,18 @@ class TwStalkerSearcher:
             self.context.close()
         if self._playwright:
             self._playwright.stop()
+
+        # Print statistics
+        print(f"\n📊 Request Statistics:")
+        print(f"  Total requests: {self._request_count}")
+        print(f"  Rate limit hits: {self._rate_limit_hits}")
+        if self._request_count > 0:
+            success_rate = (
+                (self._request_count - self._rate_limit_hits)
+                / self._request_count
+                * 100
+            )
+            print(f"  Success rate: {success_rate:.1f}%")
         print("Browser closed")
 
 
@@ -384,10 +500,16 @@ def main():
         "--headless", action="store_true", help="Run headless (not recommended)"
     )
     parser.add_argument(
-        "--delay-min", type=float, default=2.0, help="Min delay between actions"
+        "--delay-min",
+        type=float,
+        default=3.0,
+        help="Min delay between actions (default: 3s)",
     )
     parser.add_argument(
-        "--delay-max", type=float, default=5.0, help="Max delay between actions"
+        "--delay-max",
+        type=float,
+        default=7.0,
+        help="Max delay between actions (default: 7s)",
     )
 
     args = parser.parse_args()
