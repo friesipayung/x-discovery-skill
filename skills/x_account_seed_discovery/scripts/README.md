@@ -130,3 +130,41 @@ with SotweSearcher(headless=False) as searcher:
 - Both scripts include rate limiting to be respectful to the services
 - Sotwe.com is a third-party proxy - availability and structure may change
 - Always check terms of service before scraping
+
+## Troubleshooting
+
+### Connection Refused / Cannot Connect to sotwe.com
+
+If you get connection errors when using `search_sotwe.py`:
+
+```
+ERROR: Cannot connect to https://www.sotwe.com
+This may be due to:
+  - Geographic blocking
+  - Network restrictions
+  - The site being temporarily down
+```
+
+**Solutions:**
+1. **Try a different network** - Some networks block sotwe.com
+2. **Use a VPN** - Change your geographic location
+3. **Try alternatives** - Consider these X/Twitter viewers:
+   - nitter.net (if available)
+   - Use the official X API v2
+   - Use X.com directly with Playwright (requires login)
+
+### Playwright Stealth Import Error
+
+If you get import errors with `playwright-stealth`:
+
+```python
+# Old (incorrect)
+from playwright_stealth import stealth_sync
+
+# New (correct)
+from playwright_stealth import Stealth
+stealth = Stealth()
+stealth.apply_stealth_sync(page)
+```
+
+The script has been updated to use the correct API.
