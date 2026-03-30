@@ -323,6 +323,22 @@ class TwStalkerSearcher:
                 html = page.content()
                 profiles = self._parse_search_results(html, max_results)
 
+                # Try to load more results if available
+                if len(profiles) < max_results:
+                    additional_profiles = self._load_more_results(
+                        page, max_results - len(profiles)
+                    )
+                    profiles.extend(additional_profiles)
+
+                # Remove duplicates based on handle
+                seen_handles = set()
+                unique_profiles = []
+                for profile in profiles:
+                    if profile.handle not in seen_handles:
+                        seen_handles.add(profile.handle)
+                        unique_profiles.append(profile)
+                profiles = unique_profiles
+
                 page.close()
 
                 if profiles:
@@ -342,6 +358,65 @@ class TwStalkerSearcher:
                     break
 
         return profiles[:max_results]
+
+    def _load_more_results(self, page, remaining_slots: int) -> List[XProfile]:
+        """
+        Click 'Load more' buttons to get additional results.
+
+        TwStalker uses: <a class="add-nw-event" data-cursor="...">
+        When clicked, renders additional content at the bottom.
+        """
+        additional_profiles = []
+        max_load_more_clicks = 10  # Prevent infinite loops
+
+        for click_attempt in range(max_load_more_clicks):
+            if len(additional_profiles) >= remaining_slots:
+                break
+
+            # Find load more button
+            load_more = page.locator("a.add-nw-event[data-cursor]").first
+
+            if not load_more or load_more.count() == 0:
+                print(
+                    f"  No more 'Load more' buttons found after {click_attempt} clicks"
+                )
+                break
+
+            try:
+                # Get current profile count to detect new content
+                current_html = page.content()
+                current_count = len(self._parse_search_results(current_html, 9999))
+
+                # Click the load more button
+                print(f"  Clicking 'Load more' button (attempt {click_attempt + 1})...")
+                load_more.click()
+
+                # Wait for new content to load
+                time.sleep(2)
+                self._random_delay()
+
+                # Check if new content was added
+                new_html = page.content()
+                new_profiles = self._parse_search_results(new_html, 9999)
+                new_count = len(new_profiles)
+
+                if new_count > current_count:
+                    # Extract only the newly added profiles
+                    newly_added = new_profiles[current_count:]
+                    slots_available = remaining_slots - len(additional_profiles)
+                    additional_profiles.extend(newly_added[:slots_available])
+                    print(
+                        f"    ✓ Loaded {len(newly_added)} more profiles (total: {len(additional_profiles)}/{remaining_slots})"
+                    )
+                else:
+                    print(f"    No new profiles loaded")
+                    break
+
+            except Exception as e:
+                print(f"    Error clicking load more: {e}")
+                break
+
+        return additional_profiles
 
     def _parse_search_results(self, html: str, max_results: int) -> List[XProfile]:
         """Parse search results from TwStalker HTML."""
