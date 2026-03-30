@@ -15,7 +15,7 @@ Discover quality X.com seed accounts using a **news-first approach** that ground
 
 1. **Searches news articles** for your topic to find current, relevant issues
 2. **Extracts keywords and entities** from those articles
-3. **Searches X posts** using those keywords to find accounts actually discussing the topic
+3. **Searches X posts** via Nitter instances using those keywords
 4. **Filters out spam/promo/opportunistic accounts** with aggressive anti-wave filtering
 5. **Uses AI to judge** which accounts are quality seed candidates
 6. **Saves results to SQLite** with full audit trail and no duplicates
@@ -95,7 +95,42 @@ Export eligible accounts
 - `not_eligible` - Rejected (spam/off-topic/opportunistic)
 - `uncertain` - Needs human review
 
-## Implementation
+## Nitter Instance Management
+
+The skill uses multiple Nitter instances with automatic load balancing and rate limit awareness:
+
+### Default Instances
+
+```python
+NITTER_INSTANCES = [
+    "https://nitter.net",
+    "https://xcancel.com",
+    "https://nitter.poast.org",
+    "https://nitter.privacyredirect.com",
+    "https://lightbrd.com",
+    "https://nitter.space",
+    "https://nitter.tiekoetter.com",
+]
+```
+
+See [Nitter Instances Wiki](https://github.com/zedeus/nitter/wiki/Instances) for the full list.
+
+### Rate Limit Handling
+
+- Tracks response times and error rates per instance
+- Automatically rotates to healthy instances
+- Exponential backoff for rate-limited instances
+- Marks instances as unhealthy after consecutive failures
+
+### Chrome Profile
+
+Nitter access uses Playwright with a persistent Chrome profile:
+- **Location:** `~/.x-discovery/chrome-profile`
+- **Purpose:** Maintains cookies/session state across runs
+- **Benefits:** Reduces detection, improves reliability
+- **Creation:** Automatic on first run
+
+## Implementation Details
 
 ### Quick Start (5 minutes)
 
@@ -116,10 +151,24 @@ export DEFAULT_REGION="Indonesia"
 
 Before using this skill, ensure you have:
 - **SQLite 3.x** installed on your system
-- **News search provider** access (e.g., web search API, Brave Search, Serper)
-- **X/Twitter data provider** access (e.g., X API v2, or web scraping tools)
+- **News search provider** access (DuckDuckGo free, or SerpAPI for Google News)
+- **Playwright** installed for Nitter access (`pip install playwright playwright-stealth`)
+- **Chrome profile** created at `~/.x-discovery/chrome-profile`
 - **This skill repository** cloned or downloaded locally
 - **Environment variables** configured (see below)
+
+### Architecture
+
+**News Search (HTTP-based):**
+- Uses DuckDuckGo HTML interface (free, no API key)
+- Optional: SerpAPI for Google News (requires API key)
+- No browser automation needed
+
+**X/Twitter Access (Browser-based):**
+- Uses Nitter instances via Playwright with Chrome profile
+- Chrome profile stored at `~/.x-discovery/chrome-profile`
+- Automatic instance rotation with rate limit awareness
+- Stealth mode to avoid detection
 
 ### 1. Setup SQLite Database
 
@@ -137,80 +186,37 @@ sqlite3 ~/.x-discovery/seed.sql < skills/x_account_seed_discovery/sql/schema.sql
 export SQLITE_PATH="$HOME/.x-discovery/seed.sql"
 export DEFAULT_REGION="Indonesia"
 
-# Provider credentials (depends on your runtime and providers):
-# - News provider: BRAVE_API_KEY, SERPER_API_KEY, etc.
-# - X/Twitter provider: X_API_KEY, X_API_SECRET, etc.
-# See TECHNICAL_DESIGN.md for provider-specific setup
+# Optional: For SerpAPI Google News (instead of DuckDuckGo)
+export SERPAPI_KEY="your_serpapi_key"
+
+# Optional: Custom Nitter instances (defaults provided)
+export NITTER_INSTANCES="https://nitter.net,https://xcancel.com"
 ```
 
 **Supported Runtimes:**
 - **Claude Code** - Use `@x_account_seed_discovery` with natural language parameters
 - **Opencode** - Use `opencode run skill x_account_seed_discovery` with JSON input
 - **Custom agentic tools** - Import and call with structured input/output
-- **Playwright Agent Mode** - Use agent instructions for direct browser control
+- **Direct scripts** - Run Python scripts directly
 
-### Using Playwright (Agent Mode)
+### 3. Setup Chrome Profile
 
-For agents (Claude Code, Opencode) that can run Playwright directly, use the agent instructions in `agent-instructions/`:
+Create a Chrome profile for Nitter access:
 
-**Agent Instructions Available:**
-- `agent-instructions/PLAYWRIGHT_GUIDE.md` - Complete Playwright usage guide
-- `agent-instructions/QUICK_REFERENCE.md` - One-liners and selectors
-- `agent-instructions/EXAMPLE_WORKFLOW.md` - Step-by-step execution example
-
-**Key Features:**
-- **Stealth Mode**: Uses `playwright-stealth` to avoid detection on X.com
-- **No API Keys**: Can use DuckDuckGo (free) instead of paid news APIs
-- **Direct Browser Control**: Agent controls browser to search and extract data
-- **Anti-Detection**: Random delays, human-like scrolling, custom user agents
-- **AdGuard Extension**: Blocks ads and trackers for cleaner scraping (optional but recommended)
-- **Sotwe.com Fallback**: Alternative proxy when X.com is inaccessible (replaced by Nitter)
-- **Nitter Fallback**: Uses Nitter instances (https://nitter.net, xcancel.com, etc.) for public X access
-
-**Recommended Setup:**
 ```bash
-# Install Playwright and stealth mode
-pip install playwright playwright-stealth
-playwright install chromium
+# Create profile directory
+mkdir -p ~/.x-discovery/chrome-profile
 
-# Optional: Install AdGuard extension for better stealth
-# Download: https://chromewebstore.google.com/detail/adguard-adblocker/bgnkhhnnamicmpeenaelnjfhikgbkllg
+# The profile will be populated automatically on first run
+# Or manually setup by opening Chrome with:
+# google-chrome --user-data-dir="$HOME/.x-discovery/chrome-profile"
 ```
 
-**When to Use Agent Mode:**
-- You want to avoid API costs
-- You need more control over the search process
-- You're running in an environment with Playwright available
-- You want to use stealth mode for X searches
-
-**Quick Agent Command:**
-```
-@x_account_seed_discovery Use Playwright with stealth mode to search news 
-and X profiles for topic="politics" region="Indonesia"
-```
-
-The agent will:
-1. Read the agent instructions
-2. Use Playwright to search Google News (or DuckDuckGo as fallback)
-3. Extract keywords from articles
-4. Use Playwright with stealth to search X.com
-5. **Fallback to Nitter** if X.com requires login or is blocked
-6. Aggregate accounts and evaluate with AI
-7. Save results to SQLite
-
-**X.com Fallback (Nitter):**
-If X.com is inaccessible (requires login, rate limited, or blocked), the agent automatically uses **Nitter** instances as a proxy:
-- Search: `https://nitter.net/search?f=tweets&q={query}`
-- Profile: `https://nitter.net/{handle}`
-- Available instances: nitter.net, xcancel.com, nitter.privacyredirect.com, nitter.poast.org
-
-Nitter provides public access to X/Twitter content without authentication, making it a reliable fallback when direct X.com access fails. See https://github.com/zedeus/nitter/wiki/Instances for the full list.
-
-### 3. Run Discovery
+### 4. Run Discovery
 
 **Claude Code example:**
 ```
-@x_account_seed_discovery with topic="government" region="Indonesia" min_followers=5000
+@x_account_seed_discovery with topic="politics" region="Indonesia" min_followers=5000
 ```
 
 **Opencode example:**
@@ -221,6 +227,21 @@ opencode run skill x_account_seed_discovery --input '{
   "min_followers": 10000,
   "anti_wave_mode": true
 }'
+```
+
+**Direct script execution:**
+```bash
+# Search news
+python skills/x_account_seed_discovery/scripts/search_news.py \
+  --topic "politics" \
+  --region "Indonesia" \
+  --max-results 20
+
+# Search X via Nitter
+python skills/x_account_seed_discovery/scripts/search_nitter.py \
+  search \
+  --query "politics Indonesia" \
+  --max-results 50
 ```
 
 **Direct JSON input:**
@@ -502,6 +523,8 @@ See [README.md](../../README.md#updating) for detailed update instructions inclu
 | `prompts/seed_judge.md` | AI judge prompt template |
 | `schemas/input.json` | Input validation schema |
 | `schemas/output.json` | Output validation schema |
+| `scripts/search_news.py` | News search (DuckDuckGo/SerpAPI) |
+| `scripts/search_nitter.py` | X/Twitter search via Nitter (Playwright) |
 
 ## Version
 

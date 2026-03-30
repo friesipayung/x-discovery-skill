@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
 """
 News Search Script for X Account Seed Discovery
-Searches news articles using DuckDuckGo (no Playwright required)
+Searches news articles using DuckDuckGo (free) or SerpAPI Google News (API key required)
 
 Usage:
+    # DuckDuckGo (free, no API key)
     python search_news.py --topic "politics" --region "Indonesia" --max-results 20
+
+    # SerpAPI Google News (requires API key)
+    python search_news.py --topic "politics" --region "Indonesia" --provider serpapi --max-results 20
+
     python search_news.py --topic "mining policy" --region "Indonesia" --output news.json
+
+Environment:
+    SERPAPI_KEY - Required for SerpAPI provider (get from https://serpapi.com)
 """
 
 import argparse
 import json
+import os
 import re
 import socket
 import sys
@@ -97,6 +106,94 @@ class NewsArticle:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+class SerpAPINewsSearcher:
+    """Search news using SerpAPI Google News API."""
+
+    BASE_URL = "https://serpapi.com/search"
+
+    def __init__(self, api_key: Optional[str] = None, delay: float = 1.0):
+        """
+        Initialize searcher.
+
+        Args:
+            api_key: SerpAPI key (or from SERPAPI_KEY env var)
+            delay: Delay between requests in seconds
+        """
+        self.api_key = api_key or os.environ.get("SERPAPI_KEY")
+        if not self.api_key:
+            raise ValueError(
+                "SerpAPI key required. Set SERPAPI_KEY env var or pass api_key parameter."
+            )
+        self.delay = delay
+        self.session = requests.Session()
+        self.session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+        )
+
+    def search(self, query: str, max_results: int = 20) -> List[NewsArticle]:
+        """
+        Search for news articles using Google News via SerpAPI.
+
+        Args:
+            query: Search query
+            max_results: Maximum number of results to return
+
+        Returns:
+            List of NewsArticle objects
+        """
+        articles = []
+        page = 0
+        max_pages = (max_results // 10) + 1
+
+        while len(articles) < max_results and page < max_pages:
+            params = {
+                "engine": "google_news",
+                "q": query,
+                "api_key": self.api_key,
+                "num": min(10, max_results - len(articles)),
+                "start": page * 10,
+            }
+
+            try:
+                response = self.session.get(self.BASE_URL, params=params, timeout=30)
+                response.raise_for_status()
+                data = response.json()
+
+                # Parse news results
+                news_results = data.get("news_results", [])
+                for item in news_results:
+                    article = NewsArticle(
+                        title=item.get("title", ""),
+                        url=item.get("link", ""),
+                        source=item.get("source", {}).get("name", "Unknown"),
+                        snippet=item.get("snippet", ""),
+                        published_at=item.get("date", None),
+                    )
+                    articles.append(article)
+
+                    if len(articles) >= max_results:
+                        break
+
+                # Check if there are more results
+                if not news_results:
+                    break
+
+                page += 1
+                if page < max_pages and len(articles) < max_results:
+                    time.sleep(self.delay)
+
+            except requests.RequestException as e:
+                print(f"Error searching news: {e}", file=sys.stderr)
+                break
+            except json.JSONDecodeError as e:
+                print(f"Error parsing response: {e}", file=sys.stderr)
+                break
+
+        return articles[:max_results]
 
 
 class DuckDuckGoNewsSearcher:
@@ -270,7 +367,11 @@ class DuckDuckGoNewsSearcher:
 
 
 def search_news(
-    topic: str, region: str, max_results: int = 20, verify_ssl: bool = True
+    topic: str,
+    region: str,
+    max_results: int = 20,
+    provider: str = "duckduckgo",
+    verify_ssl: bool = True,
 ) -> List[NewsArticle]:
     """
     Convenience function to search news.
@@ -279,13 +380,19 @@ def search_news(
         topic: Topic to search for
         region: Geographic region
         max_results: Maximum results to return
-        verify_ssl: Whether to verify SSL certificates
+        provider: News provider ('duckduckgo' or 'serpapi')
+        verify_ssl: Whether to verify SSL certificates (DuckDuckGo only)
 
     Returns:
         List of NewsArticle objects
     """
     query = f"{topic} {region}"
-    searcher = DuckDuckGoNewsSearcher(delay=1.0, verify_ssl=verify_ssl)
+
+    if provider == "serpapi":
+        searcher = SerpAPINewsSearcher(delay=1.0)
+    else:
+        searcher = DuckDuckGoNewsSearcher(delay=1.0, verify_ssl=verify_ssl)
+
     return searcher.search(query, max_results)
 
 
@@ -326,18 +433,33 @@ def main():
         action="store_true",
         help="Disable SSL certificate verification (use if you get SSL errors)",
     )
+    parser.add_argument(
+        "--provider",
+        choices=["duckduckgo", "serpapi"],
+        default="duckduckgo",
+        help="News provider: duckduckgo (free) or serpapi (requires API key)",
+    )
 
     args = parser.parse_args()
 
     print(f"Searching news for: {args.topic} in {args.region}")
+    print(f"Provider: {args.provider}")
     print(f"Max results: {args.max_results}")
 
     # Search
-    searcher = DuckDuckGoNewsSearcher(
-        delay=args.delay, verify_ssl=not args.no_verify_ssl
-    )
     query = f"{args.topic} {args.region}"
-    articles = searcher.search(query, args.max_results)
+
+    try:
+        if args.provider == "serpapi":
+            searcher = SerpAPINewsSearcher(delay=args.delay)
+        else:
+            searcher = DuckDuckGoNewsSearcher(
+                delay=args.delay, verify_ssl=not args.no_verify_ssl
+            )
+        articles = searcher.search(query, args.max_results)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
     print(f"Found {len(articles)} articles")
 
@@ -346,6 +468,7 @@ def main():
         "query": query,
         "topic": args.topic,
         "region": args.region,
+        "provider": args.provider,
         "total_found": len(articles),
         "timestamp": datetime.now().isoformat(),
         "articles": [article.to_dict() for article in articles],

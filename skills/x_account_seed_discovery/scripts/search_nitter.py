@@ -1,12 +1,21 @@
 #!/usr/bin/env python3
 """
 Nitter Search Script for X Account Seed Discovery
-Searches X/Twitter profiles via Nitter instances using Playwright with Chrome profile
+Searches X/Twitter via Nitter instances using Playwright with Chrome profile
+
+Features:
+- Automatic Nitter instance load balancing
+- Rate limit awareness and rotation
+- Persistent Chrome profile for session continuity
 
 Usage:
     python search_nitter.py --query "politics Indonesia" --max-results 50
     python search_nitter.py --profile prabowo --output profile.json
-    python search_nitter.py --search "mining policy" --max-results 100 --instance nitter.net
+    python search_nitter.py --search "mining policy" --max-results 100
+
+Environment:
+    NITTER_INSTANCES - Comma-separated list of Nitter instances (optional)
+    Default profile: ~/.x-discovery/chrome-profile
 
 Requirements:
     pip install playwright playwright-stealth beautifulsoup4 lxml nest-asyncio
@@ -15,11 +24,12 @@ Requirements:
 
 import argparse
 import json
+import os
 import nest_asyncio
 import random
 import sys
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import List, Optional, Dict
 from datetime import datetime
 from pathlib import Path
@@ -31,8 +41,8 @@ from bs4 import BeautifulSoup
 # Apply nest_asyncio to allow nested event loops (needed in some environments)
 nest_asyncio.apply()
 
-# Working Nitter instances (from https://github.com/zedeus/nitter/wiki/Instances)
-NITTER_INSTANCES = [
+# Default Nitter instances (from https://github.com/zedeus/nitter/wiki/Instances)
+DEFAULT_NITTER_INSTANCES = [
     "https://nitter.net",
     "https://xcancel.com",
     "https://nitter.poast.org",
@@ -43,6 +53,29 @@ NITTER_INSTANCES = [
     "https://nuku.trabun.org",
     "https://nitter.catsarch.com",
 ]
+
+# Load from environment or use defaults
+NITTER_INSTANCES = (
+    os.environ.get("NITTER_INSTANCES", "").split(",")
+    if os.environ.get("NITTER_INSTANCES")
+    else DEFAULT_NITTER_INSTANCES
+)
+NITTER_INSTANCES = [url.strip() for url in NITTER_INSTANCES if url.strip()]
+
+# Default Chrome profile path
+DEFAULT_CHROME_PROFILE = os.path.expanduser("~/.x-discovery/chrome-profile")
+
+
+@dataclass
+class InstanceHealth:
+    """Tracks health metrics for a Nitter instance."""
+
+    url: str
+    last_used: Optional[float] = None
+    consecutive_failures: int = 0
+    last_error: Optional[str] = None
+    avg_response_time: float = 0.0
+    is_healthy: bool = True
 
 
 @dataclass
@@ -84,34 +117,104 @@ class XProfile:
 
 
 class NitterSearcher:
-    """Search X/Twitter via Nitter using Playwright with Chrome profile."""
+    """Search X/Twitter via Nitter using Playwright with Chrome profile and instance load balancing."""
 
     def __init__(
         self,
-        base_url: str = "https://nitter.net",
+        instances: Optional[List[str]] = None,
         headless: bool = False,
         stealth: bool = True,
         delay_range: tuple = (2, 5),
         chrome_profile_dir: Optional[str] = None,
+        max_failures: int = 3,
     ):
         """
-        Initialize Nitter searcher.
+        Initialize Nitter searcher with load balancing.
 
         Args:
-            base_url: Nitter instance URL to use
+            instances: List of Nitter instance URLs (defaults to NITTER_INSTANCES)
             headless: Whether to run headless (False recommended for avoiding blocks)
             stealth: Whether to use playwright-stealth
             delay_range: Random delay range between actions (min, max seconds)
-            chrome_profile_dir: Path to Chrome user data directory (profile)
+            chrome_profile_dir: Path to Chrome user data directory (defaults to ~/.x-discovery/chrome-profile)
+            max_failures: Max consecutive failures before marking instance unhealthy
         """
-        self.base_url = base_url.rstrip("/")
+        self.instances = instances or NITTER_INSTANCES
+        if not self.instances:
+            raise ValueError(
+                "No Nitter instances configured. Set NITTER_INSTANCES env var or pass instances list."
+            )
+
         self.headless = headless
         self.stealth = stealth
         self.delay_range = delay_range
-        self.chrome_profile_dir = chrome_profile_dir
+        self.chrome_profile_dir = chrome_profile_dir or DEFAULT_CHROME_PROFILE
+        self.max_failures = max_failures
+
+        # Initialize health tracking for all instances
+        self.instance_health: Dict[str, InstanceHealth] = {
+            url: InstanceHealth(url=url) for url in self.instances
+        }
+
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self._playwright = None
+        self._current_instance: Optional[str] = None
+
+    def _get_healthy_instance(self) -> str:
+        """Get the next healthy instance using round-robin with health check."""
+        healthy = [h for h in self.instance_health.values() if h.is_healthy]
+
+        if not healthy:
+            # Reset all instances if none are healthy
+            for h in self.instance_health.values():
+                h.is_healthy = True
+                h.consecutive_failures = 0
+            healthy = list(self.instance_health.values())
+
+        # Sort by last used (oldest first) for round-robin
+        healthy.sort(key=lambda h: h.last_used or 0)
+
+        return healthy[0].url
+
+    def _mark_instance_success(self, url: str, response_time: float):
+        """Mark instance as successful."""
+        health = self.instance_health[url]
+        health.last_used = time.time()
+        health.consecutive_failures = 0
+        health.is_healthy = True
+        # Update average response time
+        if health.avg_response_time == 0:
+            health.avg_response_time = response_time
+        else:
+            health.avg_response_time = (health.avg_response_time * 0.7) + (
+                response_time * 0.3
+            )
+
+    def _mark_instance_failure(self, url: str, error: str):
+        """Mark instance as failed."""
+        health = self.instance_health[url]
+        health.last_used = time.time()
+        health.consecutive_failures += 1
+        health.last_error = error
+
+        if health.consecutive_failures >= self.max_failures:
+            health.is_healthy = False
+            print(
+                f"Instance {url} marked unhealthy after {health.consecutive_failures} failures"
+            )
+
+    def _get_instance_stats(self) -> Dict:
+        """Get statistics for all instances."""
+        return {
+            url: {
+                "healthy": h.is_healthy,
+                "failures": h.consecutive_failures,
+                "avg_response_time": round(h.avg_response_time, 2),
+                "last_error": h.last_error,
+            }
+            for url, h in self.instance_health.items()
+        }
 
     def __enter__(self):
         """Context manager entry."""
@@ -123,7 +226,11 @@ class NitterSearcher:
         self.close()
 
     def _init_browser(self):
-        """Initialize browser with optional Chrome profile."""
+        """Initialize browser with Chrome profile."""
+        # Ensure profile directory exists
+        profile_path = Path(self.chrome_profile_dir)
+        profile_path.mkdir(parents=True, exist_ok=True)
+
         self._playwright = sync_playwright().start()
 
         # Build launch arguments
@@ -133,54 +240,42 @@ class NitterSearcher:
             "--disable-features=IsolateOrigins,site-per-process",
         ]
 
-        # Check if using Chrome profile
-        if self.chrome_profile_dir and Path(self.chrome_profile_dir).exists():
-            # Use persistent context with user data directory
-            profile_path = str(Path(self.chrome_profile_dir).resolve())
-            print(f"Using Chrome profile: {profile_path}")
+        # Use persistent context with user data directory
+        profile_path = str(profile_path.resolve())
+        print(f"Using Chrome profile: {profile_path}")
 
-            # Use system Chrome executable if available (better profile compatibility)
-            chrome_exe = self._get_chrome_executable()
-            if chrome_exe:
-                print(f"Using system Chrome: {chrome_exe}")
-                self.context = self._playwright.chromium.launch_persistent_context(
-                    user_data_dir=profile_path,
-                    headless=self.headless,
-                    args=args,
-                    executable_path=chrome_exe,
-                    viewport={"width": 1920, "height": 1080},
-                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    locale="en-US",
-                    timezone_id="America/New_York",
-                )
-            else:
-                self.context = self._playwright.chromium.launch_persistent_context(
-                    user_data_dir=profile_path,
-                    headless=self.headless,
-                    args=args,
-                    viewport={"width": 1920, "height": 1080},
-                    user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    locale="en-US",
-                    timezone_id="America/New_York",
-                )
-            # When using persistent context, we don't need separate browser instance
-            self.browser = None
-        else:
-            # Launch browser normally and create context
-            self.browser = self._playwright.chromium.launch(
+        # Use system Chrome executable if available (better profile compatibility)
+        chrome_exe = self._get_chrome_executable()
+        if chrome_exe:
+            print(f"Using system Chrome: {chrome_exe}")
+            self.context = self._playwright.chromium.launch_persistent_context(
+                user_data_dir=profile_path,
                 headless=self.headless,
                 args=args,
+                executable_path=chrome_exe,
+                viewport={"width": 1920, "height": 1080},
+                user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                locale="en-US",
+                timezone_id="America/New_York",
             )
-
-            self.context = self.browser.new_context(
+        else:
+            self.context = self._playwright.chromium.launch_persistent_context(
+                user_data_dir=profile_path,
+                headless=self.headless,
+                args=args,
                 viewport={"width": 1920, "height": 1080},
                 user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 locale="en-US",
                 timezone_id="America/New_York",
             )
 
+        # When using persistent context, we don't need separate browser instance
+        self.browser = None
         print(f"Browser initialized (headless={self.headless})")
-        print(f"Using Nitter instance: {self.base_url}")
+        print(f"Available Nitter instances: {len(self.instances)}")
+        print(
+            f"Healthy instances: {sum(1 for h in self.instance_health.values() if h.is_healthy)}"
+        )
 
     def _get_chrome_executable(self) -> Optional[str]:
         """Find Chrome executable path."""
@@ -249,7 +344,7 @@ class NitterSearcher:
 
     def search_posts(self, query: str, max_results: int = 50) -> List[XPost]:
         """
-        Search for posts on Nitter.
+        Search for posts on Nitter with automatic instance rotation.
 
         Args:
             query: Search query
@@ -258,36 +353,83 @@ class NitterSearcher:
         Returns:
             List of XPost objects
         """
-        if not self.browser:
+        if not self.context:
             self._init_browser()
 
+        posts = []
+        attempted_instances = set()
+
+        while len(attempted_instances) < len(self.instances):
+            # Get next healthy instance
+            instance_url = self._get_healthy_instance()
+
+            if instance_url in attempted_instances:
+                break
+
+            attempted_instances.add(instance_url)
+            self._current_instance = instance_url
+
+            print(f"\nTrying instance: {instance_url}")
+            start_time = time.time()
+
+            try:
+                new_posts = self._search_posts_on_instance(
+                    instance_url, query, max_results - len(posts)
+                )
+
+                if new_posts:
+                    # Add unique posts
+                    existing_ids = {p.post_id for p in posts if p.post_id}
+                    for post in new_posts:
+                        if post.post_id not in existing_ids:
+                            posts.append(post)
+                            existing_ids.add(post.post_id)
+
+                    # Mark success
+                    response_time = time.time() - start_time
+                    self._mark_instance_success(instance_url, response_time)
+                    print(
+                        f"✓ Instance {instance_url} returned {len(new_posts)} posts in {response_time:.1f}s"
+                    )
+
+                    # If we have enough posts, stop
+                    if len(posts) >= max_results:
+                        break
+
+                    # Otherwise try next instance for more results
+                    continue
+                else:
+                    # No posts found, try next instance
+                    self._mark_instance_failure(instance_url, "No posts found")
+
+            except Exception as e:
+                response_time = time.time() - start_time
+                error_msg = str(e)
+                self._mark_instance_failure(instance_url, error_msg)
+                print(f"✗ Instance {instance_url} failed: {error_msg}")
+
+        print(f"\nTotal posts collected: {len(posts)}")
+        print(f"Instance stats: {self._get_instance_stats()}")
+
+        return posts[:max_results]
+
+    def _search_posts_on_instance(
+        self, instance_url: str, query: str, max_results: int
+    ) -> List[XPost]:
+        """Search posts on a specific Nitter instance."""
         page = self._create_page()
         posts = []
 
         try:
             # Navigate to search page
             encoded_query = query.replace(" ", "%20")
-            url = f"{self.base_url}/search?f=tweets&q={encoded_query}"
+            url = f"{instance_url}/search?f=tweets&q={encoded_query}"
 
             print(f"Searching: {url}")
 
-            try:
-                page.goto(url, wait_until="domcontentloaded", timeout=60000)
-                self._wait_for_page_load(page)
-                time.sleep(3)  # Extra wait for dynamic content
-            except Exception as e:
-                if "ERR_CONNECTION_REFUSED" in str(e) or "ERR_NAME_NOT_RESOLVED" in str(
-                    e
-                ):
-                    print(f"ERROR: Cannot connect to {self.base_url}")
-                    print("This instance may be down or blocked.")
-                    print("\nAlternatives to try:")
-                    print("  - Use a different Nitter instance (--instance)")
-                    print("  - Try the official nitter.net")
-                    print("  - Use a VPN or different network")
-                    time.sleep(5)
-                    return posts
-                raise
+            page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            self._wait_for_page_load(page)
+            time.sleep(3)  # Extra wait for dynamic content
 
             self._random_delay()
 
@@ -323,10 +465,8 @@ class NitterSearcher:
                     scroll_attempts = 0
                     last_height = new_height
 
-            print(f"Collected {len(posts)} posts")
-
         except Exception as e:
-            print(f"Error searching posts: {e}", file=sys.stderr)
+            raise
 
         finally:
             page.close()
@@ -335,7 +475,7 @@ class NitterSearcher:
 
     def get_profile(self, handle: str) -> Optional[XProfile]:
         """
-        Get profile information for a specific handle.
+        Get profile information for a specific handle with instance rotation.
 
         Args:
             handle: X/Twitter handle (without @)
@@ -343,16 +483,49 @@ class NitterSearcher:
         Returns:
             XProfile object or None if not found
         """
-        if not self.browser:
+        if not self.context:
             self._init_browser()
 
+        attempted_instances = set()
+
+        while len(attempted_instances) < len(self.instances):
+            # Get next healthy instance
+            instance_url = self._get_healthy_instance()
+
+            if instance_url in attempted_instances:
+                break
+
+            attempted_instances.add(instance_url)
+
+            try:
+                profile = self._get_profile_on_instance(instance_url, handle)
+
+                if profile:
+                    self._mark_instance_success(instance_url, 1.0)
+                    return profile
+                else:
+                    # Profile not found on this instance, try next
+                    self._mark_instance_failure(instance_url, "Profile not found")
+
+            except Exception as e:
+                error_msg = str(e)
+                self._mark_instance_failure(instance_url, error_msg)
+                print(f"Instance {instance_url} failed: {error_msg}")
+
+        print(f"Profile not found on any instance: @{handle}")
+        return None
+
+    def _get_profile_on_instance(
+        self, instance_url: str, handle: str
+    ) -> Optional[XProfile]:
+        """Get profile from a specific Nitter instance."""
         page = self._create_page()
         profile = None
 
         try:
             # Clean handle
             handle = handle.strip().lstrip("@").lower()
-            url = f"{self.base_url}/{handle}"
+            url = f"{instance_url}/{handle}"
 
             print(f"Fetching profile: {url}")
             page.goto(url, wait_until="domcontentloaded", timeout=60000)
@@ -366,11 +539,9 @@ class NitterSearcher:
 
             if profile:
                 print(f"Found profile: @{profile.handle} ({profile.display_name})")
-            else:
-                print(f"Profile not found: @{handle}")
 
         except Exception as e:
-            print(f"Error fetching profile: {e}", file=sys.stderr)
+            raise
 
         finally:
             page.close()
@@ -614,7 +785,7 @@ class NitterSearcher:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Search X/Twitter via Nitter using Playwright with Chrome profile"
+        description="Search X/Twitter via Nitter using Playwright with Chrome profile and load balancing"
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
@@ -634,15 +805,10 @@ def main():
 
     # Common options
     parser.add_argument(
-        "--instance",
-        default="nitter.net",
-        help=f"Nitter instance to use (default: nitter.net). Available: {', '.join(NITTER_INSTANCES[:3])}...",
-    )
-    parser.add_argument(
-        "--profile",
+        "--profile-dir",
         "-p",
-        default=str(Path.home() / ".x-discovery" / "chrome-profile"),
-        help="Path to Chrome profile directory (default: ~/.x-discovery/chrome-profile)",
+        default=DEFAULT_CHROME_PROFILE,
+        help=f"Path to Chrome profile directory (default: {DEFAULT_CHROME_PROFILE})",
     )
     parser.add_argument(
         "--headless", action="store_true", help="Run headless (not recommended)"
@@ -663,29 +829,27 @@ def main():
         parser.print_help()
         return 1
 
-    # Build instance URL
-    instance_url = args.instance
-    if not instance_url.startswith("http"):
-        instance_url = f"https://{instance_url}"
-
-    # Initialize searcher
+    # Initialize searcher with load balancing
     delay_range = (args.delay_min, args.delay_max)
 
     try:
         with NitterSearcher(
-            base_url=instance_url,
             headless=args.headless,
             stealth=not args.no_stealth,
             delay_range=delay_range,
-            chrome_profile_dir=args.profile,
+            chrome_profile_dir=args.profile_dir,
         ) as searcher:
             if args.command == "search":
                 print(f"Searching posts: '{args.query}'")
+                print(
+                    f"Using {len(NITTER_INSTANCES)} Nitter instances with load balancing"
+                )
                 posts = searcher.search_posts(args.query, args.max_results)
 
                 output = {
                     "query": args.query,
-                    "instance": instance_url,
+                    "instances_used": list(searcher.instance_health.keys()),
+                    "instance_stats": searcher._get_instance_stats(),
                     "total_found": len(posts),
                     "timestamp": datetime.now().isoformat(),
                     "posts": [post.to_dict() for post in posts],
@@ -693,6 +857,9 @@ def main():
 
             elif args.command == "profile":
                 print(f"Fetching profile: @{args.handle}")
+                print(
+                    f"Using {len(NITTER_INSTANCES)} Nitter instances with load balancing"
+                )
                 profile = searcher.get_profile(args.handle)
 
                 if not profile:
@@ -701,7 +868,8 @@ def main():
 
                 output = {
                     "handle": args.handle,
-                    "instance": instance_url,
+                    "instances_used": list(searcher.instance_health.keys()),
+                    "instance_stats": searcher._get_instance_stats(),
                     "timestamp": datetime.now().isoformat(),
                     "profile": profile.to_dict(),
                 }
