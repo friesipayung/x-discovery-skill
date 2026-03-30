@@ -47,15 +47,13 @@ from bs4 import BeautifulSoup
 nest_asyncio.apply()
 
 # Default Nitter instances (from https://github.com/zedeus/nitter/wiki/Instances)
+# Filtered: NO Cloudflare protected instances (Cloudflare actively blocks scrapers/automation)
 DEFAULT_NITTER_INSTANCES = [
     "https://nitter.net",
     "https://xcancel.com",
     "https://nitter.poast.org",
     "https://nitter.privacyredirect.com",
-    "https://lightbrd.com",
-    "https://nitter.space",
     "https://nitter.tiekoetter.com",
-    "https://nuku.trabun.org",
     "https://nitter.catsarch.com",
 ]
 

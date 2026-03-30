@@ -107,11 +107,15 @@ NITTER_INSTANCES = [
     "https://xcancel.com",
     "https://nitter.poast.org",
     "https://nitter.privacyredirect.com",
-    "https://lightbrd.com",
-    "https://nitter.space",
     "https://nitter.tiekoetter.com",
+    "https://nitter.catsarch.com",
 ]
 ```
+
+✅ **All Cloudflare-protected instances removed:**
+- ❌ `lightbrd.com` (Cloudflare)
+- ❌ `nitter.space` (Cloudflare + Ads)
+- ❌ `nuku.trabun.org` (Cloudflare)
 
 See [Nitter Instances Wiki](https://github.com/zedeus/nitter/wiki/Instances) for the full list.
 
