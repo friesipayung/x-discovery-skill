@@ -42,14 +42,17 @@ class DuckDuckGoNewsSearcher:
     BASE_URL = "https://html.duckduckgo.com/html/"
     NEWS_URL = "https://duckduckgo.com/html/"
 
-    def __init__(self, delay: float = 1.0):
+    def __init__(self, delay: float = 1.0, verify_ssl: bool = True):
         """
         Initialize searcher.
 
         Args:
             delay: Delay between requests in seconds (be polite)
+            verify_ssl: Whether to verify SSL certificates (default: True)
+                         Set to False if you get SSL certificate errors
         """
         self.delay = delay
+        self.verify_ssl = verify_ssl
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -83,8 +86,17 @@ class DuckDuckGoNewsSearcher:
         }
 
         try:
-            response = self.session.get(self.BASE_URL, params=params, timeout=30)
+            response = self.session.get(
+                self.BASE_URL, params=params, timeout=30, verify=self.verify_ssl
+            )
             response.raise_for_status()
+        except requests.exceptions.SSLError as e:
+            print(f"SSL Error: {e}", file=sys.stderr)
+            print(
+                "If this is a certificate verification issue, try running with --no-verify-ssl",
+                file=sys.stderr,
+            )
+            return articles
         except requests.RequestException as e:
             print(f"Error searching news: {e}", file=sys.stderr)
             return articles
@@ -98,8 +110,13 @@ class DuckDuckGoNewsSearcher:
             time.sleep(self.delay)  # Be polite
 
             try:
-                response = self.session.get(next_url, timeout=30)
+                response = self.session.get(
+                    next_url, timeout=30, verify=self.verify_ssl
+                )
                 response.raise_for_status()
+            except requests.exceptions.SSLError as e:
+                print(f"SSL Error on pagination: {e}", file=sys.stderr)
+                break
             except requests.RequestException as e:
                 print(f"Error fetching next page: {e}", file=sys.stderr)
                 break
@@ -186,7 +203,9 @@ class DuckDuckGoNewsSearcher:
             return "unknown"
 
 
-def search_news(topic: str, region: str, max_results: int = 20) -> List[NewsArticle]:
+def search_news(
+    topic: str, region: str, max_results: int = 20, verify_ssl: bool = True
+) -> List[NewsArticle]:
     """
     Convenience function to search news.
 
@@ -194,12 +213,13 @@ def search_news(topic: str, region: str, max_results: int = 20) -> List[NewsArti
         topic: Topic to search for
         region: Geographic region
         max_results: Maximum results to return
+        verify_ssl: Whether to verify SSL certificates
 
     Returns:
         List of NewsArticle objects
     """
     query = f"{topic} {region}"
-    searcher = DuckDuckGoNewsSearcher(delay=1.0)
+    searcher = DuckDuckGoNewsSearcher(delay=1.0, verify_ssl=verify_ssl)
     return searcher.search(query, max_results)
 
 
@@ -235,6 +255,11 @@ def main():
         default=1.0,
         help="Delay between requests in seconds (default: 1.0)",
     )
+    parser.add_argument(
+        "--no-verify-ssl",
+        action="store_true",
+        help="Disable SSL certificate verification (use if you get SSL errors)",
+    )
 
     args = parser.parse_args()
 
@@ -242,7 +267,9 @@ def main():
     print(f"Max results: {args.max_results}")
 
     # Search
-    searcher = DuckDuckGoNewsSearcher(delay=args.delay)
+    searcher = DuckDuckGoNewsSearcher(
+        delay=args.delay, verify_ssl=not args.no_verify_ssl
+    )
     query = f"{args.topic} {args.region}"
     articles = searcher.search(query, args.max_results)
 
