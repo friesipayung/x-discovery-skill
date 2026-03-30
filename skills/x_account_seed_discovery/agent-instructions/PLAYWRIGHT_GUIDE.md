@@ -611,22 +611,30 @@ def extract_profile_count(page, count_type):
     return None
 ```
 
-### Fallback: Using Sotwe.com Proxy (When X.com is Inaccessible)
+### Fallback: Using Nitter (When X.com is Inaccessible)
 
-If X.com is blocked, requires login, or returns errors, use **sotwe.com** as a proxy:
+If X.com is blocked, requires login, or returns errors, use **Nitter** instances as a proxy:
 
-**Sotwe.com** is a Twitter/X proxy that provides public access to posts and profiles without authentication.
+**Nitter** is a free and open-source alternative Twitter/X front-end that provides public access to posts and profiles without authentication. See https://github.com/zedeus/nitter/wiki/Instances for the full list of instances.
 
-#### Search Posts via Sotwe.com
+**Recommended instances:**
+- https://nitter.net (official)
+- https://xcancel.com
+- https://nitter.privacyredirect.com
+- https://nitter.poast.org
+- https://nitter.tiekoetter.com
+
+#### Search Posts via Nitter
 
 ```python
-def search_sotwe_posts(query, max_posts=100):
+def search_nitter_posts(query, max_posts=100, instance="nitter.net"):
     """
-    Search X/Twitter posts via sotwe.com proxy.
+    Search X/Twitter posts via Nitter proxy.
     
     Args:
         query: Search query (e.g., "politics Indonesia")
         max_posts: Maximum posts to collect
+        instance: Nitter instance URL (default: nitter.net)
     
     Returns:
         List of post dicts with author info
@@ -647,89 +655,127 @@ def search_sotwe_posts(query, max_posts=100):
         stealth_sync(page)
         
         try:
-            # Build sotwe search URL
+            # Build Nitter search URL
             encoded_query = urllib.parse.quote(query)
-            url = f"https://www.sotwe.com/search/{encoded_query}"
+            url = f"https://{instance}/search?f=tweets&q={encoded_query}"
             
-            print(f"Searching sotwe.com: {query}")
-            page.goto(url, wait_until='networkidle')
+            print(f"Searching Nitter ({instance}): {query}")
+            page.goto(url, wait_until='domcontentloaded')
             
-            # Wait for content to load
-            page.wait_for_selector('.tweet-item, .post-item, [class*="tweet"]', timeout=15000)
+            # Wait for page to fully load
+            time.sleep(3)
+            
+            # Wait for content to load (Nitter uses .timeline-item)
+            page.wait_for_selector('.timeline-item', timeout=15000)
             
             # Extract posts
-            # Note: Selectors may vary based on sotwe's current layout
-            post_selectors = [
-                '.tweet-item',
-                '.post-item',
-                'article',
-                '[class*="tweet"]',
-                '[class*="post"]'
-            ]
-            
-            post_elements = []
-            for selector in post_selectors:
-                post_elements = page.query_selector_all(selector)
-                if post_elements:
-                    break
+            post_elements = page.query_selector_all('.timeline-item')
             
             for elem in post_elements[:max_posts]:
                 try:
-                    # Extract author handle
-                    author_elem = elem.query_selector('a[href^="/"], .username, [class*="user"]')
+                    # Skip "show more" items
+                    if elem.query_selector('a.show-more'):
+                        continue
+                    
+                    # Extract author handle from username link
+                    author_elem = elem.query_selector('a.username')
                     handle = ""
                     if author_elem:
-                        href = author_elem.get_attribute('href') or ""
-                        handle = href.strip('/').split('/')[0] if href else author_elem.inner_text()
-                        handle = handle.lstrip('@')
+                        handle = author_elem.inner_text().strip().lstrip('@')
+                    
+                    # Extract display name
+                    name_elem = elem.query_selector('a.fullname')
+                    display_name = name_elem.inner_text().strip() if name_elem else handle
                     
                     # Extract post text
-                    text_elem = elem.query_selector('.tweet-text, .post-text, [class*="text"], p')
+                    text_elem = elem.query_selector('.tweet-content')
                     text = text_elem.inner_text() if text_elem else ""
                     
-                    # Extract post URL
-                    link_elem = elem.query_selector('a[href*="/status/"], a[href*="/tweet/"]')
+                    # Extract post URL and ID
+                    link_elem = elem.query_selector('a.tweet-link')
                     post_url = ""
+                    post_id = ""
                     if link_elem:
                         href = link_elem.get_attribute('href') or ""
-                        post_url = f"https://www.sotwe.com{href}" if href.startswith('/') else href
+                        post_url = f"https://{instance}{href}" if href.startswith('/') else href
+                        # Extract ID from /username/status/123456
+                        parts = href.split('/')
+                        if len(parts) >= 3:
+                            post_id = parts[-1]
                     
-                    # Extract date/time
-                    time_elem = elem.query_selector('time, .time, [class*="date"]')
-                    post_time = time_elem.get_attribute('datetime') if time_elem else ""
+                    # Extract engagement stats
+                    stats = elem.query_selector('.tweet-stats')
+                    likes = 0
+                    retweets = 0
+                    replies = 0
+                    if stats:
+                        like_elem = stats.query_selector('.icon-heart')
+                        if like_elem:
+                            likes = extract_nitter_stat(like_elem.inner_text())
+                        rt_elem = stats.query_selector('.icon-retweet')
+                        if rt_elem:
+                            retweets = extract_nitter_stat(rt_elem.inner_text())
+                        reply_elem = stats.query_selector('.icon-comment')
+                        if reply_elem:
+                            replies = extract_nitter_stat(reply_elem.inner_text())
+                    
+                    # Extract timestamp
+                    time_elem = elem.query_selector('.tweet-date a')
+                    post_time = time_elem.get_attribute('title') if time_elem else ""
                     
                     if handle and text:
                         posts.append({
-                            'id': post_url.split('/')[-1] if post_url else str(hash(text))[:10],
+                            'id': post_id or str(hash(text))[:10],
                             'text': text,
                             'author_handle': handle,
-                            'author_display_name': handle,  # Sotwe may not show display name
+                            'author_display_name': display_name,
                             'url': post_url,
                             'created_at': post_time,
+                            'likes': likes,
+                            'retweets': retweets,
+                            'replies': replies,
                             'query': query
                         })
                 except:
                     continue
             
             browser.close()
-            print(f"  Found {len(posts)} posts via sotwe.com")
+            print(f"  Found {len(posts)} posts via Nitter")
             
         except Exception as e:
-            print(f"Error searching sotwe.com: {e}")
+            print(f"Error searching Nitter: {e}")
             browser.close()
     
     return posts
+
+
+def extract_nitter_stat(text):
+    """Extract number from Nitter stat text (handles K, M suffixes)."""
+    text = text.strip().replace(',', '')
+    match = re.search(r'([\d.]+)\s*([KMB]?)', text, re.I)
+    if match:
+        num = float(match.group(1))
+        suffix = match.group(2).upper()
+        if suffix == 'K':
+            num *= 1000
+        elif suffix == 'M':
+            num *= 1000000
+        elif suffix == 'B':
+            num *= 1000000000
+        return int(num)
+    return 0
 ```
 
-#### Get Profile via Sotwe.com
+#### Get Profile via Nitter
 
 ```python
-def get_sotwe_profile(handle):
+def get_nitter_profile(handle, instance="nitter.net"):
     """
-    Get X/Twitter profile via sotwe.com proxy.
+    Get X/Twitter profile via Nitter proxy.
     
     Args:
         handle: X handle (with or without @)
+        instance: Nitter instance URL (default: nitter.net)
     
     Returns:
         Dict with profile information or None
@@ -748,89 +794,126 @@ def get_sotwe_profile(handle):
         stealth_sync(page)
         
         try:
-            url = f"https://www.sotwe.com/{handle}"
-            print(f"Fetching profile via sotwe.com: @{handle}")
+            url = f"https://{instance}/{handle}"
+            print(f"Fetching profile via Nitter ({instance}): @{handle}")
             
-            page.goto(url, wait_until='networkidle')
+            page.goto(url, wait_until='domcontentloaded')
+            time.sleep(3)  # Wait for page to fully load
             
-            # Wait for profile to load
-            page.wait_for_selector('[class*="profile"], .user-info, h1', timeout=15000)
+            # Wait for profile card to load
+            page.wait_for_selector('.profile-card', timeout=15000)
             
             profile = {'handle': handle, 'profile_url': url}
             
             # Display name
-            name_elem = page.query_selector('h1, .profile-name, [class*="name"]')
+            name_elem = page.query_selector('.profile-card-fullname')
             if name_elem:
                 profile['display_name'] = name_elem.inner_text().strip()
+            else:
+                profile['display_name'] = handle
             
             # Bio
-            bio_elem = page.query_selector('.bio, .description, [class*="bio"], [class*="description"]')
+            bio_elem = page.query_selector('.profile-bio')
             if bio_elem:
                 profile['bio'] = bio_elem.inner_text()
             
             # Stats (followers, following, posts)
-            stats_elems = page.query_selector_all('.stat, [class*="stat"], [class*="count"]')
-            for stat in stats_elems:
+            stat_elems = page.query_selector_all('.profile-stat')
+            for stat in stat_elems:
                 try:
-                    text = stat.inner_text().lower()
-                    value_elem = stat.query_selector('.value, [class*="value"], span, strong')
-                    if not value_elem:
+                    label_elem = stat.query_selector('.profile-stat-header')
+                    value_elem = stat.query_selector('.profile-stat-num')
+                    
+                    if not label_elem or not value_elem:
                         continue
                     
+                    label = label_elem.inner_text().lower()
                     value_text = value_elem.inner_text()
-                    value_text = value_text.replace(',', '').replace('K', '000').replace('M', '000000')
-                    numbers = re.findall(r'\d+', value_text)
+                    value = extract_nitter_stat(value_text)
                     
-                    if numbers:
-                        value = int(numbers[0])
-                        if 'follower' in text or 'pengikut' in text:
-                            profile['followers_count'] = value
-                        elif 'following' in text or 'diikuti' in text:
-                            profile['following_count'] = value
-                        elif 'post' in text or 'tweet' in text:
-                            profile['post_count'] = value
+                    if 'follower' in label:
+                        profile['followers_count'] = value
+                    elif 'following' in label:
+                        profile['following_count'] = value
+                    elif 'tweet' in label or 'post' in label:
+                        profile['posts_count'] = value
                 except:
                     continue
             
             # Profile image
-            img_elem = page.query_selector('.avatar img, .profile-image img, [class*="avatar"] img')
+            img_elem = page.query_selector('.profile-card-avatar')
             if img_elem:
-                profile['profile_image_url'] = img_elem.get_attribute('src')
+                src = img_elem.get_attribute('src')
+                if src and src.startswith('//'):
+                    src = 'https:' + src
+                profile['profile_image_url'] = src
+            
+            # Banner image
+            banner_elem = page.query_selector('.profile-banner')
+            if banner_elem:
+                src = banner_elem.get_attribute('src')
+                if src and src.startswith('//'):
+                    src = 'https:' + src
+                profile['banner_image_url'] = src
             
             # Verified badge
-            profile['verified'] = bool(page.query_selector('.verified, [class*="verified"], [class*="badge"]'))
+            profile['is_verified'] = bool(page.query_selector('.verified-icon'))
+            
+            # Location
+            location_elem = page.query_selector('.profile-location')
+            if location_elem:
+                profile['location'] = location_elem.inner_text()
+            
+            # Website
+            website_elem = page.query_selector('.profile-website')
+            if website_elem:
+                profile['website'] = website_elem.get_attribute('href')
+            
+            # Joined date
+            joined_elem = page.query_selector('.profile-joindate')
+            if joined_elem:
+                profile['joined_date'] = joined_elem.inner_text()
             
             browser.close()
             print(f"  ✓ Profile fetched: {profile.get('display_name', handle)}")
             return profile
             
         except Exception as e:
-            print(f"  ✗ Error fetching profile via sotwe.com: {e}")
+            print(f"  ✗ Error fetching profile via Nitter: {e}")
             browser.close()
             return None
 ```
 
-#### When to Use Sotwe.com
+#### When to Use Nitter
 
-**Use sotwe.com when:**
+**Use Nitter when:**
 - X.com requires login/authentication
 - X.com returns rate limit errors
 - X.com is blocked in your region
 - X.com layout changes break selectors
-- You want simpler, more stable scraping
+- You want free, public access without API keys
+
+**Advantages over sotwe.com:**
+- Open-source with multiple instances (better redundancy)
+- Consistent API/layout across instances
+- No authentication required
+- Better community support and maintenance
 
 **Limitations:**
 - May not have all posts (only cached/public ones)
-- Profile data may be less detailed
+- Instances can go down (have backups ready)
 - Rate limits still apply
-- Site availability depends on sotwe.com uptime
+- Check instance status: https://status.d420.de/
 
 **Example Usage:**
 
 ```python
-# Try X.com first, fallback to sotwe.com
+# Try X.com first, fallback to Nitter
 def search_posts_with_fallback(queries, max_posts=300):
     all_posts = []
+    
+    # Try multiple Nitter instances
+    instances = ['nitter.net', 'xcancel.com', 'nitter.privacyredirect.com']
     
     for query in queries:
         # Try X.com first
@@ -842,14 +925,17 @@ def search_posts_with_fallback(queries, max_posts=300):
         except Exception as e:
             print(f"X.com failed for '{query}': {e}")
         
-        # Fallback to sotwe.com
-        try:
-            posts = search_sotwe_posts(query, max_posts=50)
-            if posts:
-                all_posts.extend(posts)
-                print(f"Using sotwe.com fallback for '{query}'")
-        except Exception as e:
-            print(f"Sotwe.com also failed for '{query}': {e}")
+        # Fallback to Nitter instances
+        for instance in instances:
+            try:
+                posts = search_nitter_posts(query, max_posts=50, instance=instance)
+                if posts:
+                    all_posts.extend(posts)
+                    print(f"Using Nitter fallback ({instance}) for '{query}'")
+                    break
+            except Exception as e:
+                print(f"Nitter {instance} failed for '{query}': {e}")
+                continue
     
     return all_posts
 ```

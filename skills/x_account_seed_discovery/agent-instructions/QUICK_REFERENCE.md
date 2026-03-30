@@ -112,24 +112,27 @@ browser = p.chromium.launch(
 
 **Download:** https://chromewebstore.google.com/detail/adguard-adblocker/bgnkhhnnamicmpeenaelnjfhikgbkllg
 
-## X.com Fallback (Sotwe.com)
+## X.com Fallback (Nitter)
 
-If X.com is inaccessible, use **sotwe.com** proxy:
+If X.com is inaccessible, use **Nitter** instances:
 
-**Search:** `https://www.sotwe.com/search/{query}`
-**Profile:** `https://www.sotwe.com/{handle}`
+**Instances:** https://nitter.net, https://xcancel.com, https://nitter.privacyredirect.com, https://nitter.poast.org, https://nitter.tiekoetter.com
+
+**Search:** `https://nitter.net/search?f=tweets&q={query}`
+**Profile:** `https://nitter.net/{handle}`
 
 ```python
-# Quick sotwe.com search
-def search_sotwe(query):
-    page.goto(f"https://www.sotwe.com/search/{query.replace(' ', '%20')}")
-    posts = page.query_selector_all('.tweet-item, article')
+# Quick Nitter search
+def search_nitter(query, instance="nitter.net"):
+    encoded = query.replace(' ', '%20')
+    page.goto(f"https://{instance}/search?f=tweets&q={encoded}")
+    posts = page.query_selector_all('.timeline-item')
     return posts
 
-# Quick sotwe profile
-def get_sotwe_profile(handle):
-    page.goto(f"https://www.sotwe.com/{handle}")
-    # Extract profile data...
+# Quick Nitter profile
+def get_nitter_profile(handle, instance="nitter.net"):
+    page.goto(f"https://{instance}/{handle}")
+    # Extract profile data from .profile-card...
 ```
 
 **When to use:**
@@ -137,6 +140,9 @@ def get_sotwe_profile(handle):
 - Rate limited on X.com
 - X.com blocked in region
 - More stable scraping needed
+- Free public access without authentication
+
+**Available instances:** See https://github.com/zedeus/nitter/wiki/Instances
 
 ## Error Recovery
 

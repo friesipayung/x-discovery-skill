@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Sotwe.com Search Script for X Account Seed Discovery
-Searches X/Twitter profiles via sotwe.com proxy using Playwright with AdGuard (headful mode)
+Nitter Search Script for X Account Seed Discovery
+Searches X/Twitter profiles via Nitter instances using Playwright with Chrome profile
 
 Usage:
-    python search_sotwe.py --query "politics Indonesia" --max-results 50
-    python search_sotwe.py --profile prabowo --output profile.json
-    python search_sotwe.py --search "mining policy" --max-results 100 --adguard-path /path/to/adguard
+    python search_nitter.py --query "politics Indonesia" --max-results 50
+    python search_nitter.py --profile prabowo --output profile.json
+    python search_nitter.py --search "mining policy" --max-results 100 --instance nitter.net
 
 Requirements:
     pip install playwright playwright-stealth beautifulsoup4 lxml nest-asyncio
@@ -31,10 +31,23 @@ from bs4 import BeautifulSoup
 # Apply nest_asyncio to allow nested event loops (needed in some environments)
 nest_asyncio.apply()
 
+# Working Nitter instances (from https://github.com/zedeus/nitter/wiki/Instances)
+NITTER_INSTANCES = [
+    "https://nitter.net",
+    "https://xcancel.com",
+    "https://nitter.poast.org",
+    "https://nitter.privacyredirect.com",
+    "https://lightbrd.com",
+    "https://nitter.space",
+    "https://nitter.tiekoetter.com",
+    "https://nuku.trabun.org",
+    "https://nitter.catsarch.com",
+]
+
 
 @dataclass
 class XPost:
-    """Represents an X/Twitter post from sotwe.com."""
+    """Represents an X/Twitter post from Nitter."""
 
     post_id: Optional[str]
     text: str
@@ -51,7 +64,7 @@ class XPost:
 
 @dataclass
 class XProfile:
-    """Represents an X/Twitter profile from sotwe.com."""
+    """Represents an X/Twitter profile from Nitter."""
 
     handle: str
     display_name: str
@@ -70,30 +83,28 @@ class XProfile:
         return asdict(self)
 
 
-class SotweSearcher:
-    """Search X/Twitter via sotwe.com using Playwright with AdGuard."""
-
-    BASE_URL = "https://www.sotwe.com"
+class NitterSearcher:
+    """Search X/Twitter via Nitter using Playwright with Chrome profile."""
 
     def __init__(
         self,
-        adguard_path: Optional[str] = None,
-        headless: bool = False,  # Headful required for extensions
+        base_url: str = "https://nitter.net",
+        headless: bool = False,
         stealth: bool = True,
         delay_range: tuple = (2, 5),
         chrome_profile_dir: Optional[str] = None,
     ):
         """
-        Initialize sotwe searcher.
+        Initialize Nitter searcher.
 
         Args:
-            adguard_path: Path to AdGuard extension (folder or .crx file)
-            headless: Whether to run headless (False required for extensions)
+            base_url: Nitter instance URL to use
+            headless: Whether to run headless (False recommended for avoiding blocks)
             stealth: Whether to use playwright-stealth
             delay_range: Random delay range between actions (min, max seconds)
             chrome_profile_dir: Path to Chrome user data directory (profile)
         """
-        self.adguard_path = adguard_path
+        self.base_url = base_url.rstrip("/")
         self.headless = headless
         self.stealth = stealth
         self.delay_range = delay_range
@@ -112,7 +123,7 @@ class SotweSearcher:
         self.close()
 
     def _init_browser(self):
-        """Initialize browser with AdGuard extension and optional Chrome profile."""
+        """Initialize browser with optional Chrome profile."""
         self._playwright = sync_playwright().start()
 
         # Build launch arguments
@@ -121,17 +132,6 @@ class SotweSearcher:
             "--disable-web-security",
             "--disable-features=IsolateOrigins,site-per-process",
         ]
-
-        # Add AdGuard extension if provided
-        if self.adguard_path and Path(self.adguard_path).exists():
-            adguard_path = str(Path(self.adguard_path).resolve())
-            args.extend(
-                [
-                    f"--disable-extensions-except={adguard_path}",
-                    f"--load-extension={adguard_path}",
-                ]
-            )
-            print(f"Loading AdGuard extension from: {adguard_path}")
 
         # Check if using Chrome profile
         if self.chrome_profile_dir and Path(self.chrome_profile_dir).exists():
@@ -180,6 +180,7 @@ class SotweSearcher:
             )
 
         print(f"Browser initialized (headless={self.headless})")
+        print(f"Using Nitter instance: {self.base_url}")
 
     def _get_chrome_executable(self) -> Optional[str]:
         """Find Chrome executable path."""
@@ -202,49 +203,39 @@ class SotweSearcher:
         delay = random.uniform(*self.delay_range)
         time.sleep(delay)
 
-    def _wait_for_cloudflare(self, page: Page, timeout: int = 120):
-        """Wait for Cloudflare verification to complete."""
-        print("Checking for Cloudflare verification...")
+    def _wait_for_page_load(self, page: Page, timeout: int = 30):
+        """Wait for page to fully load and any Cloudflare/verification to complete."""
+        print("Waiting for page to load...")
         start_time = time.time()
-        initial_url = page.url
+
+        # Wait for initial load
+        page.wait_for_load_state("networkidle", timeout=timeout * 1000)
 
         while time.time() - start_time < timeout:
-            # Get current page state
             title = page.title()
-            current_url = page.url
+            url = page.url
 
-            # Check if we're on Cloudflare challenge page
-            is_cloudflare = (
+            # Check for verification/challenge pages
+            is_verifying = (
                 "just a moment" in title.lower()
                 or "checking your browser" in title.lower()
-                or "verifying you are human" in title.lower()
-                or "challenge-platform" in current_url
-                or page.locator("#challenge-form").count() > 0
-                or page.locator('[id*="challenge"]').count() > 0
+                or "verifying" in title.lower()
+                or "challenge" in url.lower()
                 or page.locator('text="Checking your browser"').count() > 0
-                or page.locator('text="Verifying you are human"').count() > 0
-                or page.locator("iframe[src*='challenge']").count() > 0
-                or page.locator(".cf-turnstile").count() > 0
+                or page.locator('text="Just a moment"').count() > 0
             )
 
-            if not is_cloudflare:
-                print(
-                    f"Cloudflare verification complete (took {int(time.time() - start_time)}s)"
-                )
-                print(f"Final URL: {current_url}")
-                return
+            if not is_verifying:
+                elapsed = int(time.time() - start_time)
+                print(f"Page loaded successfully (took {elapsed}s)")
+                return True
 
             elapsed = int(time.time() - start_time)
-            print(f"Still waiting for Cloudflare verification... ({elapsed}s elapsed)")
-            print(f"  Current URL: {current_url}")
-            print(f"  Page title: {title}")
+            print(f"Still waiting for verification... ({elapsed}s)")
+            time.sleep(2)
 
-            # Wait a bit longer during verification
-            time.sleep(3)
-
-        print(f"Warning: Cloudflare verification timeout after {timeout}s")
-        print(f"Current URL: {page.url}")
-        print(f"Page title: {page.title()}")
+        print(f"Warning: Page load timeout after {timeout}s")
+        return False
 
     def _create_page(self) -> Page:
         """Create a new page with stealth mode."""
@@ -258,7 +249,7 @@ class SotweSearcher:
 
     def search_posts(self, query: str, max_results: int = 50) -> List[XPost]:
         """
-        Search for posts on sotwe.com.
+        Search for posts on Nitter.
 
         Args:
             query: Search query
@@ -276,29 +267,25 @@ class SotweSearcher:
         try:
             # Navigate to search page
             encoded_query = query.replace(" ", "%20")
-            url = f"{self.BASE_URL}/search/{encoded_query}"
+            url = f"{self.base_url}/search?f=tweets&q={encoded_query}"
 
             print(f"Searching: {url}")
 
             try:
-                page.goto(url, wait_until="networkidle", timeout=60000)
-                self._wait_for_cloudflare(page)
-                time.sleep(5)  # Wait 5 seconds after loading sotwe page
+                page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                self._wait_for_page_load(page)
+                time.sleep(3)  # Extra wait for dynamic content
             except Exception as e:
                 if "ERR_CONNECTION_REFUSED" in str(e) or "ERR_NAME_NOT_RESOLVED" in str(
                     e
                 ):
-                    print(f"ERROR: Cannot connect to {self.BASE_URL}")
-                    print("This may be due to:")
-                    print("  - Geographic blocking")
-                    print("  - Network restrictions")
-                    print("  - The site being temporarily down")
+                    print(f"ERROR: Cannot connect to {self.base_url}")
+                    print("This instance may be down or blocked.")
                     print("\nAlternatives to try:")
+                    print("  - Use a different Nitter instance (--instance)")
+                    print("  - Try the official nitter.net")
                     print("  - Use a VPN or different network")
-                    print("  - Try nitter.net or other X/Twitter viewers")
-                    print("  - Use the official X API instead")
-                    print("\nWaiting 10 seconds before closing browser...")
-                    time.sleep(30)  # Wait so user can see the browser
+                    time.sleep(5)
                     return posts
                 raise
 
@@ -365,12 +352,12 @@ class SotweSearcher:
         try:
             # Clean handle
             handle = handle.strip().lstrip("@").lower()
-            url = f"{self.BASE_URL}/{handle}"
+            url = f"{self.base_url}/{handle}"
 
             print(f"Fetching profile: {url}")
-            page.goto(url, wait_until="networkidle", timeout=60000)
-            self._wait_for_cloudflare(page)
-            time.sleep(5)  # Wait 5 seconds after loading sotwe page
+            page.goto(url, wait_until="domcontentloaded", timeout=60000)
+            self._wait_for_page_load(page)
+            time.sleep(3)  # Extra wait for dynamic content
             self._random_delay()
 
             # Parse profile
@@ -391,26 +378,39 @@ class SotweSearcher:
         return profile
 
     def _parse_search_results(self, html: str) -> List[XPost]:
-        """Parse search results from HTML."""
+        """Parse search results from Nitter HTML."""
+        import re
+
         soup = BeautifulSoup(html, "lxml")
         posts = []
 
-        # Find all tweet cards
-        tweet_cards = soup.find_all("div", class_="tweet-card") or soup.find_all(
-            "article"
-        )
+        # Nitter uses timeline-item class for tweets
+        tweet_cards = soup.find_all("div", class_="timeline-item")
 
         for card in tweet_cards:
             try:
+                # Skip "show more" items
+                if card.find("a", class_="show-more"):
+                    continue
+
+                # Extract tweet link and ID
+                tweet_link = card.find("a", class_="tweet-link")
+                if not tweet_link:
+                    continue
+
+                href = tweet_link.get("href", "")
+                post_id = None
+                match = re.search(r"/status/(\d+)", href)
+                if match:
+                    post_id = match.group(1)
+
                 # Extract author info
-                author_elem = card.find("a", href=re.compile(r"^/[^/]+$"))
+                author_elem = card.find("a", class_="username")
                 if not author_elem:
                     continue
 
-                author_handle = author_elem.get("href", "").strip("/")
-                author_name_elem = card.find("span", class_="name") or card.find(
-                    "div", class_="user-name"
-                )
+                author_handle = author_elem.get_text(strip=True).lstrip("@")
+                author_name_elem = card.find("a", class_="fullname")
                 author_display_name = (
                     author_name_elem.get_text(strip=True)
                     if author_name_elem
@@ -418,31 +418,37 @@ class SotweSearcher:
                 )
 
                 # Extract tweet text
-                text_elem = card.find("div", class_="tweet-text") or card.find(
-                    "div", {"data-testid": "tweetText"}
-                )
+                text_elem = card.find("div", class_="tweet-content")
                 text = text_elem.get_text(strip=True) if text_elem else ""
 
                 # Extract engagement metrics
-                likes = self._extract_number(card, ["likes", "like-count", "favorite"])
-                retweets = self._extract_number(card, ["retweets", "retweet-count"])
-                replies = self._extract_number(card, ["replies", "reply-count"])
+                stats = card.find("div", class_="tweet-stats")
+                likes = 0
+                retweets = 0
+                replies = 0
+
+                if stats:
+                    like_elem = stats.find("div", class_="icon-heart")
+                    if like_elem:
+                        likes = self._extract_stat_number(like_elem)
+
+                    rt_elem = stats.find("div", class_="icon-retweet")
+                    if rt_elem:
+                        retweets = self._extract_stat_number(rt_elem)
+
+                    reply_elem = stats.find("div", class_="icon-comment")
+                    if reply_elem:
+                        replies = self._extract_stat_number(reply_elem)
 
                 # Extract timestamp
-                time_elem = card.find("time") or card.find("span", class_="time")
-                created_at = (
-                    time_elem.get("datetime")
-                    if time_elem and time_elem.get("datetime")
-                    else None
-                )
-
-                # Extract post ID from URL if available
-                post_id = None
-                link_elem = card.find("a", href=re.compile(r"/status/\d+"))
-                if link_elem:
-                    match = re.search(r"/status/(\d+)", link_elem.get("href", ""))
-                    if match:
-                        post_id = match.group(1)
+                time_elem = card.find("span", class_="tweet-date")
+                created_at = None
+                if time_elem:
+                    time_link = time_elem.find("a")
+                    if time_link:
+                        title = time_link.get("title", "")
+                        if title:
+                            created_at = title
 
                 post = XPost(
                     post_id=post_id,
@@ -461,73 +467,104 @@ class SotweSearcher:
 
         return posts
 
+    def _extract_stat_number(self, element) -> int:
+        """Extract number from stat element."""
+        text = element.get_text(strip=True)
+        match = re.search(r"([\d.,]+)\s*([KMB]?)\s*", text, re.I)
+        if match:
+            num = float(match.group(1).replace(",", ""))
+            suffix = match.group(2).upper()
+            if suffix == "K":
+                num *= 1000
+            elif suffix == "M":
+                num *= 1000000
+            elif suffix == "B":
+                num *= 1000000000
+            return int(num)
+        return 0
+
     def _parse_profile(self, html: str, handle: str) -> Optional[XProfile]:
-        """Parse profile page HTML."""
+        """Parse profile page HTML from Nitter."""
+        import re
+
         soup = BeautifulSoup(html, "lxml")
 
         try:
             # Check if profile exists
-            error_elem = soup.find(
-                "div", string=re.compile(r"not found|does not exist", re.I)
-            )
+            error_elem = soup.find("div", class_="error-panel")
             if error_elem:
                 return None
 
+            # Extract profile info from profile-card
+            profile_card = soup.find("div", class_="profile-card")
+            if not profile_card:
+                # Try alternative selectors
+                profile_card = soup.find("div", class_="profile-tab")
+
+            if not profile_card:
+                # Try to extract from page anyway
+                profile_card = soup
+
             # Extract display name
-            name_elem = soup.find("h1", class_="profile-name") or soup.find(
-                "div", class_="user-name"
-            )
+            name_elem = profile_card.find("a", class_="profile-card-fullname")
             display_name = name_elem.get_text(strip=True) if name_elem else handle
 
             # Extract bio
-            bio_elem = soup.find("div", class_="profile-bio") or soup.find(
-                "div", {"data-testid": "UserDescription"}
-            )
+            bio_elem = profile_card.find("div", class_="profile-bio")
             bio = bio_elem.get_text(strip=True) if bio_elem else ""
 
             # Extract stats
-            followers = self._extract_stat(soup, ["followers", "Followers"])
-            following = self._extract_stat(soup, ["following", "Following"])
-            posts = self._extract_stat(soup, ["posts", "tweets", "Posts", "Tweets"])
+            stats = profile_card.find_all("div", class_="profile-stat")
+            followers = 0
+            following = 0
+            posts = 0
+
+            for stat in stats:
+                label_elem = stat.find("div", class_="profile-stat-header")
+                value_elem = stat.find("div", class_="profile-stat-num")
+
+                if label_elem and value_elem:
+                    label = label_elem.get_text(strip=True).lower()
+                    value = value_elem.get_text(strip=True)
+
+                    if "follower" in label:
+                        followers = self._parse_number(value)
+                    elif "following" in label:
+                        following = self._parse_number(value)
+                    elif "tweet" in label or "post" in label:
+                        posts = self._parse_number(value)
 
             # Extract location
-            location_elem = soup.find("span", class_="location") or soup.find(
-                "div", {"data-testid": "UserLocation"}
-            )
+            location_elem = profile_card.find("div", class_="profile-location")
             location = location_elem.get_text(strip=True) if location_elem else ""
 
             # Extract website
-            website_elem = soup.find("a", class_="website") or soup.find(
-                "a", {"data-testid": "UserUrl"}
-            )
+            website_elem = profile_card.find("a", class_="profile-website")
             website = website_elem.get("href", "") if website_elem else ""
 
             # Extract joined date
-            joined_elem = soup.find("span", class_="joined") or soup.find(
-                "div", {"data-testid": "UserJoinDate"}
-            )
+            joined_elem = profile_card.find("div", class_="profile-joindate")
             joined_date = joined_elem.get_text(strip=True) if joined_elem else ""
 
             # Check verification
-            verified_elem = soup.find(
-                "svg", class_=re.compile(r"verified", re.I)
-            ) or soup.find("span", class_=re.compile(r"verified", re.I))
+            verified_elem = profile_card.find("span", class_="verified-icon")
             is_verified = verified_elem is not None
 
             # Extract images
             profile_img = None
             banner_img = None
 
-            img_elem = soup.find("img", class_=re.compile(r"profile.*photo", re.I))
+            img_elem = profile_card.find("img", class_="profile-card-avatar")
             if img_elem:
-                profile_img = img_elem.get("src")
+                profile_img = img_elem.get("src", "")
+                if profile_img and profile_img.startswith("//"):
+                    profile_img = "https:" + profile_img
 
-            banner_elem = soup.find("div", class_=re.compile(r"banner|header", re.I))
+            banner_elem = profile_card.find("img", class_="profile-banner")
             if banner_elem:
-                style = banner_elem.get("style", "")
-                match = re.search(r'url\(["\']?([^"\')]+)', style)
-                if match:
-                    banner_img = match.group(1)
+                banner_img = banner_elem.get("src", "")
+                if banner_img and banner_img.startswith("//"):
+                    banner_img = "https:" + banner_img
 
             return XProfile(
                 handle=handle,
@@ -548,58 +585,20 @@ class SotweSearcher:
             print(f"Error parsing profile: {e}", file=sys.stderr)
             return None
 
-    def _extract_number(self, element, class_names: List[str]) -> int:
-        """Extract number from element by class names."""
-        for class_name in class_names:
-            elem = element.find(class_=re.compile(class_name, re.I))
-            if elem:
-                text = elem.get_text(strip=True)
-                # Parse numbers like "1.2K", "3M", "1,234"
-                match = re.search(r"([\d.,]+)\s*([KMB]?)", text, re.I)
-                if match:
-                    num = float(match.group(1).replace(",", ""))
-                    suffix = match.group(2).upper()
-                    if suffix == "K":
-                        num *= 1000
-                    elif suffix == "M":
-                        num *= 1000000
-                    elif suffix == "B":
-                        num *= 1000000000
-                    return int(num)
-        return 0
-
-    def _extract_stat(self, soup, keywords: List[str]) -> int:
-        """Extract stat number from profile page."""
-        for keyword in keywords:
-            # Try different selectors
-            selectors = [
-                f'div:contains("{keyword}")',
-                f'span:contains("{keyword}")',
-                f'a:contains("{keyword}")',
-            ]
-
-            for selector in selectors:
-                try:
-                    elems = soup.find_all(string=re.compile(keyword, re.I))
-                    for elem in elems:
-                        parent = elem.parent
-                        if parent:
-                            # Look for number in parent or sibling
-                            text = parent.get_text()
-                            match = re.search(r"([\d.,]+)\s*([KMB]?)", text, re.I)
-                            if match:
-                                num = float(match.group(1).replace(",", ""))
-                                suffix = match.group(2).upper()
-                                if suffix == "K":
-                                    num *= 1000
-                                elif suffix == "M":
-                                    num *= 1000000
-                                elif suffix == "B":
-                                    num *= 1000000000
-                                return int(num)
-                except:
-                    continue
-
+    def _parse_number(self, text: str) -> int:
+        """Parse number from text (handles K, M, B suffixes)."""
+        text = text.strip().replace(",", "")
+        match = re.search(r"([\d.]+)\s*([KMB]?)\s*", text, re.I)
+        if match:
+            num = float(match.group(1))
+            suffix = match.group(2).upper()
+            if suffix == "K":
+                num *= 1000
+            elif suffix == "M":
+                num *= 1000000
+            elif suffix == "B":
+                num *= 1000000000
+            return int(num)
         return 0
 
     def close(self):
@@ -615,7 +614,7 @@ class SotweSearcher:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Search X/Twitter via sotwe.com using Playwright with AdGuard"
+        description="Search X/Twitter via Nitter using Playwright with Chrome profile"
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
@@ -634,7 +633,11 @@ def main():
     profile_parser.add_argument("--output", "-o", help="Output JSON file")
 
     # Common options
-    parser.add_argument("--adguard-path", help="Path to AdGuard extension")
+    parser.add_argument(
+        "--instance",
+        default="nitter.net",
+        help=f"Nitter instance to use (default: nitter.net). Available: {', '.join(NITTER_INSTANCES[:3])}...",
+    )
     parser.add_argument(
         "--profile",
         "-p",
@@ -642,7 +645,7 @@ def main():
         help="Path to Chrome profile directory (default: ~/.x-discovery/chrome-profile)",
     )
     parser.add_argument(
-        "--headless", action="store_true", help="Run headless (no extension support)"
+        "--headless", action="store_true", help="Run headless (not recommended)"
     )
     parser.add_argument(
         "--no-stealth", action="store_true", help="Disable stealth mode"
@@ -660,12 +663,17 @@ def main():
         parser.print_help()
         return 1
 
+    # Build instance URL
+    instance_url = args.instance
+    if not instance_url.startswith("http"):
+        instance_url = f"https://{instance_url}"
+
     # Initialize searcher
     delay_range = (args.delay_min, args.delay_max)
 
     try:
-        with SotweSearcher(
-            adguard_path=args.adguard_path,
+        with NitterSearcher(
+            base_url=instance_url,
             headless=args.headless,
             stealth=not args.no_stealth,
             delay_range=delay_range,
@@ -677,6 +685,7 @@ def main():
 
                 output = {
                     "query": args.query,
+                    "instance": instance_url,
                     "total_found": len(posts),
                     "timestamp": datetime.now().isoformat(),
                     "posts": [post.to_dict() for post in posts],
@@ -692,6 +701,7 @@ def main():
 
                 output = {
                     "handle": args.handle,
+                    "instance": instance_url,
                     "timestamp": datetime.now().isoformat(),
                     "profile": profile.to_dict(),
                 }

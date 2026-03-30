@@ -164,7 +164,8 @@ For agents (Claude Code, Opencode) that can run Playwright directly, use the age
 - **Direct Browser Control**: Agent controls browser to search and extract data
 - **Anti-Detection**: Random delays, human-like scrolling, custom user agents
 - **AdGuard Extension**: Blocks ads and trackers for cleaner scraping (optional but recommended)
-- **Sotwe.com Fallback**: Alternative proxy when X.com is inaccessible
+- **Sotwe.com Fallback**: Alternative proxy when X.com is inaccessible (replaced by Nitter)
+- **Nitter Fallback**: Uses Nitter instances (https://nitter.net, xcancel.com, etc.) for public X access
 
 **Recommended Setup:**
 ```bash
@@ -193,17 +194,17 @@ The agent will:
 2. Use Playwright to search Google News (or DuckDuckGo as fallback)
 3. Extract keywords from articles
 4. Use Playwright with stealth to search X.com
-5. **Fallback to sotwe.com** if X.com requires login or is blocked
+5. **Fallback to Nitter** if X.com requires login or is blocked
 6. Aggregate accounts and evaluate with AI
 7. Save results to SQLite
 
-**X.com Fallback (Sotwe.com):**
-If X.com is inaccessible (requires login, rate limited, or blocked), the agent automatically uses **sotwe.com** as a proxy:
-- Search: `https://www.sotwe.com/search/{query}`
-- Profile: `https://www.sotwe.com/{handle}`
-- Example: `https://www.sotwe.com/prabowo`
+**X.com Fallback (Nitter):**
+If X.com is inaccessible (requires login, rate limited, or blocked), the agent automatically uses **Nitter** instances as a proxy:
+- Search: `https://nitter.net/search?f=tweets&q={query}`
+- Profile: `https://nitter.net/{handle}`
+- Available instances: nitter.net, xcancel.com, nitter.privacyredirect.com, nitter.poast.org
 
-Sotwe.com provides public access to X/Twitter content without authentication, making it a reliable fallback when direct X.com access fails.
+Nitter provides public access to X/Twitter content without authentication, making it a reliable fallback when direct X.com access fails. See https://github.com/zedeus/nitter/wiki/Instances for the full list.
 
 ### 3. Run Discovery
 

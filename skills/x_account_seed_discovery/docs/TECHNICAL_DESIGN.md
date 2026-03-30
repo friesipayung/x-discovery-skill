@@ -132,10 +132,13 @@ interface XAuthor {
 ```
 
 **Default Implementation:**
-- X API v2 (if available)
-- Web scraping fallback (Nitter, etc.)
+- X API v2 (if available with credentials)
+- Web scraping fallback using Nitter instances (preferred - no auth required)
+  - Primary: https://nitter.net (official)
+  - Fallbacks: xcancel.com, nitter.privacyredirect.com, nitter.poast.org, nitter.tiekoetter.com
+  - See https://github.com/zedeus/nitter/wiki/Instances for full list
 - Query rotation to maximize coverage
-- Rate limiting and retry logic
+- Rate limiting and retry logic with instance failover
 
 ### 5. Query Expansion Strategy
 
@@ -507,6 +510,69 @@ WHERE r.topic = ?;
 - Never log credentials
 - Log handles at INFO level
 - Log full evaluation context at DEBUG level
+
+## Playwright Scripts
+
+### Overview
+
+For environments with direct Playwright access, standalone scripts provide an alternative to API-based providers:
+
+| Script | Purpose | Requirements |
+|--------|---------|--------------|
+| `search_news.py` | DuckDuckGo news search | requests, beautifulsoup4 |
+| `search_nitter.py` | X/Twitter via Nitter | Playwright, playwright-stealth |
+| `chrome_profile.py` | Chrome profile management | Chrome browser |
+
+### search_nitter.py
+
+**Purpose:** Search X/Twitter via Nitter instances using Playwright with Chrome profile.
+
+**Nitter Instances Used:**
+- Primary: https://nitter.net (official)
+- Fallbacks: xcancel.com, nitter.privacyredirect.com, nitter.poast.org, nitter.tiekoetter.com
+- See https://github.com/zedeus/nitter/wiki/Instances for status
+
+**Key Features:**
+- **Chrome Profile Support:** Uses persistent Chrome profile for authentication state
+- **Stealth Mode:** playwright-stealth to avoid detection
+- **Cloudflare Wait:** Detects and waits for verification challenges
+- **Instance Failover:** Automatic retry on different instances
+- **Rate Limiting:** Built-in delays and human-like behavior
+
+**Usage:**
+```bash
+# Search posts
+python search_nitter.py search --query "politics Indonesia" --max-results 50
+
+# Get profile
+python search_nitter.py profile prabowo --output profile.json
+
+# Use specific instance
+python search_nitter.py --instance xcancel.com search --query "test"
+```
+
+**Why Nitter over sotwe.com:**
+- Open-source with multiple instances (better redundancy)
+- Consistent API/layout across instances
+- Active community maintenance
+- Better documented and stable
+
+### Chrome Profile Management
+
+**Default Location:** `~/.x-discovery/chrome-profile`
+
+**Benefits:**
+- Persists cookies and login sessions
+- Isolates automation from main Chrome
+- Allows pre-authentication to sites
+- Reduces detection risk
+
+**Commands:**
+```bash
+python chrome_profile.py create  # Create profile
+python chrome_profile.py test    # Test with Chrome
+python chrome_profile.py info    # Show profile info
+```
 
 ## Testing Strategy
 
