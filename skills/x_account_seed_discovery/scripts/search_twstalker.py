@@ -683,12 +683,45 @@ class TwStalkerSearcher:
         soup = BeautifulSoup(html, "lxml")
 
         try:
-            # Check if profile exists (error page indicators)
-            error_elem = soup.find(
-                text=re.compile(r"(not found|error|doesn't exist)", re.I)
-            )
-            if error_elem:
-                return None
+            # Check if profile exists - look for specific error indicators
+            # Only check in title and main content areas, not anywhere on page
+            title = soup.find("title")
+            if title:
+                title_text = title.get_text().lower()
+                # Specific error patterns in title
+                if any(
+                    pattern in title_text
+                    for pattern in [
+                        "not found",
+                        "doesn't exist",
+                        "does not exist",
+                        "page not found",
+                        "404",
+                        "error",
+                        "user not found",
+                        "account not found",
+                        "profile not found",
+                        "suspended",
+                    ]
+                ):
+                    return None
+
+            # Check for main error message (h1/h2 elements often contain error messages)
+            for header in soup.find_all(["h1", "h2"]):
+                header_text = header.get_text().lower()
+                if any(
+                    pattern in header_text
+                    for pattern in [
+                        "this account doesn't exist",
+                        "this account does not exist",
+                        "user not found",
+                        "account not found",
+                        "profile not found",
+                        "account suspended",
+                        "page not found",
+                    ]
+                ):
+                    return None
 
             # Extract profile info - adjust selectors based on actual TwStalker HTML
             # These are common patterns for X profile pages:
