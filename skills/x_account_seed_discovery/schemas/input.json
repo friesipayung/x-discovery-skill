@@ -160,6 +160,18 @@
       "description": "Custom text to append to AI judge prompt",
       "maxLength": 2000
     },
+    "use_bio_subagents": {
+      "type": "boolean",
+      "description": "Enable bio evaluation within each account subagent",
+      "default": true
+    },
+    "account_subagent_parallel": {
+      "type": "integer",
+      "description": "Number of parallel account subagents for end-to-end evaluation",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 50
+    },
     "provider": {
       "type": "string",
       "description": "Provider configuration name",
@@ -190,7 +202,9 @@
       "max_loops": 3,
       "duplicate_threshold_percent": 90,
       "anti_wave_mode": true,
-      "save_mode": "all"
+      "save_mode": "all",
+      "use_bio_subagents": true,
+      "account_subagent_parallel": 10
     },
     {
       "topic": "mining policy",

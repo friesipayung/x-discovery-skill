@@ -389,6 +389,189 @@ Return ONLY valid JSON:
 - Retry on invalid JSON (max 3 attempts)
 - Log errors per candidate
 
+### 9. Per-Account Parallel Evaluation (Account Subagents)
+
+After aggregating topic signals per account, the skill dispatches parallel subagents where EACH subagent handles ALL remaining stages for ONE account end-to-end.
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Account Aggregation Complete                   │
+│         (Each account has topic signals aggregated)          │
+└─────────────────────────────────────────────────────────────┘
+                               │
+         ┌─────────────────────┼─────────────────────┐
+         ▼                     ▼                     ▼
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│  Account     │    │  Account     │    │  Account     │
+│  Subagent 1  │    │  Subagent 2  │    │  Subagent N  │
+│  (Handle A)  │    │  (Handle B)  │    │  (Handle N)  │
+└──────────────┘    └──────────────┘    └──────────────┘
+         │                     │                     │
+    ┌────┴────┐           ┌────┴────┐           ┌────┴────┐
+    ▼         ▼           ▼         ▼           ▼         ▼
+ Anti-Wave  Prefilter  Anti-Wave  Prefilter  Anti-Wave  Prefilter
+    │         │           │         │           │         │
+    ▼         ▼           ▼         ▼           ▼         ▼
+ Bio Eval   AI Judge   Bio Eval   AI Judge   Bio Eval   AI Judge
+    │         │           │         │           │         │
+    ▼         ▼           ▼         ▼           ▼         ▼
+ Upsert    Result     Upsert    Result     Upsert    Result
+    │                     │                     │
+    └─────────────────────┼─────────────────────┘
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│              Aggregate All Subagent Results                 │
+│                    (eligible/not/uncertain)                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Each Account Subagent Executes:**
+
+1. **Anti-Wave Filter** - Check for opportunistic/spam signals
+2. **Deterministic Prefilter** - Apply hard constraints (followers, posts, verified)
+3. **Bio Evaluation** - Evaluate bio/profile metadata (if `use_bio_subagents: true`)
+4. **AI Judge Eligibility** - Final comprehensive evaluation
+5. **Prepare Database Record** - Format for SQLite upsert
+
+**Process:**
+
+```javascript
+async function dispatchAccountSubagents(aggregatedAccounts, config) {
+  // 1. Prepare input batch with all account data
+  const inputBatch = {
+    run_id: config.runId,
+    topic: config.topic,
+    region: config.region,
+    constraints: config.constraints,
+    news_keywords: config.news_keywords,
+    use_bio_subagents: config.use_bio_subagents,
+    accounts: aggregatedAccounts.map(acc => ({
+      handle: acc.handle,
+      display_name: acc.display_name,
+      bio: acc.bio,
+      followers_count: acc.followers_count,
+      following_count: acc.following_count,
+      post_count: acc.post_count,
+      verified: acc.verified,
+      location_text: acc.location_text,
+      profile_url: acc.profile_url,
+      joined_at: acc.joined_at,
+      // Topic signals
+      matched_posts_count: acc.matchedPostsCount,
+      distinct_keywords_matched: acc.distinctKeywordsMatched,
+      matched_entities: acc.matchedEntities,
+      recent_topic_post_count: acc.recentTopicPostCount,
+      sample_posts: acc.samplePosts,
+      source_queries: acc.sourceQueries
+    }))
+  };
+  
+  // 2. Write batch to temp file
+  const inputFile = `/tmp/account_batch_${config.runId}.json`;
+  await writeJSON(inputFile, inputBatch);
+  
+  // 3. Dispatch account subagent dispatcher
+  const outputFile = `/tmp/account_results_${config.runId}.json`;
+  await runAccountDispatcher({
+    input: inputFile,
+    output: outputFile,
+    parallel: config.account_subagent_parallel || 10
+  });
+  
+  // 4. Read and parse results
+  const results = await readJSON(outputFile);
+  
+  // 5. Perform database upserts
+  for (const record of results.database_records) {
+    await upsertAccount(record.account);
+    await insertEvaluation(record.evaluation);
+    await insertTopicSignals(record.topic_signals);
+  }
+  
+  return results.summary;
+}
+```
+
+**Account Evaluation Prompt:**
+
+The account subagent uses `prompts/account_evaluation.md` which guides the AI through ALL stages:
+- Stage 1: Anti-wave filter with scoring
+- Stage 2: Deterministic prefilter with constraint checks
+- Stage 3: Bio evaluation (if enabled)
+- Stage 4: Final AI judgment considering all previous stages
+- Database record preparation
+
+**Output Schema:**
+
+```json
+{
+  "handle": "example_user",
+  "evaluation_complete": true,
+  "stages": {
+    "anti_wave": {
+      "score": 0,
+      "flags": [],
+      "decision": "pass"
+    },
+    "prefilter": {
+      "passed": true,
+      "failed_constraints": [],
+      "decision": "continue"
+    },
+    "bio_evaluation": {
+      "decision": "eligible",
+      "score": 85,
+      "relevance_signals": ["signal1"],
+      "account_type_indicators": ["individual"],
+      "risk_flags": []
+    },
+    "final_judgment": {
+      "decision": "eligible",
+      "score": 88,
+      "reason_short": "...",
+      "reason_detailed": "...",
+      "matched_topic_signals": ["..."],
+      "risk_flags": [],
+      "suggested_tags": ["..."],
+      "opportunistic_score": 5,
+      "consistency_score": 85
+    }
+  },
+  "database_record": {
+    "account": { /* SQLite accounts table data */ },
+    "evaluation": { /* SQLite account_evaluations table data */ },
+    "topic_signals": { /* SQLite account_topic_signals table data */ }
+  }
+}
+```
+
+**Performance:**
+
+- Default parallelism: 10 concurrent account subagents
+- Configurable: 1-50 parallel subagents via `account_subagent_parallel`
+- Each subagent processes ONE account end-to-end
+- Typical latency: 3-8 seconds per account
+- Scales linearly with parallel count
+- 100 accounts with parallel=10 completes in ~30-80 seconds
+
+**Error Handling:**
+
+- Individual subagent failures don't stop the batch
+- Failed evaluations logged but don't block others
+- Database upsert happens after all subagents complete
+- Timeout per subagent: 60 seconds
+- Partial results saved even if some accounts fail
+
+**Benefits:**
+
+- **True Parallelism** - Each account processed independently
+- **End-to-End Isolation** - No shared state between accounts
+- **Better Resource Utilization** - CPU/network used efficiently
+- **Scalable** - Handle 50-100+ accounts simultaneously
+- **Fault Tolerant** - One failure doesn't affect others
+
 ### 10. SQLite Persistence
 
 **Connection Management:**

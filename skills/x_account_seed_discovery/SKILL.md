@@ -58,11 +58,45 @@ Extract accounts from matched posts
   ↓
 Aggregate topic signals per account
   ↓
+[PARALLEL] Dispatch account subagents (each handles 1 account end-to-end)
+  ├─ Subagent A: Anti-wave → Prefilter → Bio eval → AI judge → Upsert
+  ├─ Subagent B: Anti-wave → Prefilter → Bio eval → AI judge → Upsert
+  └─ Subagent N: Anti-wave → Prefilter → Bio eval → AI judge → Upsert
+  ↓
+Aggregate all subagent results
+  ↓
+Export eligible accounts
+```
+
+**Per-Account Parallel Processing:** After aggregating topic signals for each account, the skill dispatches parallel subagents where EACH subagent handles ALL remaining stages for ONE account:
+1. **Anti riding-the-waves filter** - Check for opportunistic/spam signals
+2. **Deterministic prefilter** - Apply hard constraints (followers, posts, etc.)
+3. **Bio subagent evaluation** - Evaluate bio/profile metadata (optional)
+4. **AI judge eligibility** - Final comprehensive evaluation
+5. **Upsert to SQLite** - Save results to database
+
+This parallel architecture allows 50+ accounts to be processed simultaneously, with each account flowing through the complete pipeline in its own isolated subagent.
+Input (topic + constraints)
+  ↓
+Search news articles for topic
+  ↓
+Extract keywords/entities from news
+  ↓
+Build X search queries
+  ↓
+Search X posts by keywords
+  ↓
+Extract accounts from matched posts
+  ↓
+Aggregate topic signals per account
+  ↓
 Anti riding-the-waves filter
   ↓
 Deterministic prefilter
   ↓
-AI judge eligibility
+[OPTIONAL] Bio subagent evaluation (parallel)
+  ↓
+AI judge eligibility (final)
   ↓
 Upsert to SQLite
   ↓
@@ -93,6 +127,8 @@ Export eligible accounts
 | `duplicate_threshold_percent` | 90 | Stop if >90% accounts already captured |
 | `anti_wave_mode` | true | Filter opportunistic accounts |
 | `save_mode` | `all` | `all` or `eligible_only` |
+| `use_bio_subagents` | true | Enable bio evaluation within account subagents |
+| `account_subagent_parallel` | 10 | Number of parallel account subagents (1-50) |
 
 ### Output Decisions
 - `eligible` - Quality seed account
@@ -411,6 +447,50 @@ SELECT * FROM v_run_summary ORDER BY started_at DESC LIMIT 5;
 sqlite3 $SQLITE_PATH -csv "SELECT * FROM v_eligible_accounts WHERE topic = 'politics'" > eligible_accounts.csv
 ```
 
+## Bio Subagent Evaluation (Within Account Subagent)
+
+When `use_bio_subagents: true` (default), each account subagent performs bio evaluation as part of its internal pipeline. This happens within the parallel account processing:
+
+```
+Account Subagent (1 account)
+  ↓
+Anti-wave filter
+  ↓
+Deterministic prefilter
+  ↓
+[Bio evaluation - internal]
+  ↓
+AI judge eligibility (considers bio results + sample posts)
+  ↓
+Prepare database record
+```
+
+The bio evaluation focuses on profile metadata (bio, handle, display name) to determine:
+- Is this an individual person (not government/org/brand)?
+- Does the bio show relevance to the topic?
+- Are there spam/promotional signals?
+
+Bio evaluation results feed into the final AI judgment but don't make the final decision alone.
+
+### Configuration
+
+```json
+{
+  "topic": "politics",
+  "region": "Indonesia",
+  "use_bio_subagents": true  // Enable bio evaluation within each account subagent
+}
+```
+
+### Disabling Bio Evaluation
+
+```json
+{
+  "topic": "politics",
+  "region": "Indonesia",
+  "use_bio_subagents": false  // Skip bio evaluation, go straight to final judgment
+}
+```
 ## Anti Riding-the-Waves Filter
 
 The skill aggressively filters opportunistic accounts that hijack trending topics:
@@ -644,16 +724,36 @@ See [README.md](../../README.md#updating) for detailed update instructions inclu
 | `docs/TECHNICAL_DESIGN.md` | Architecture and implementation details |
 | `docs/PRD.md` | Full product requirements |
 | `sql/schema.sql` | SQLite database schema |
-| `prompts/seed_judge.md` | AI judge prompt template |
+| `prompts/account_evaluation.md` | Account subagent prompt (end-to-end evaluation) |
+| `prompts/bio_judge.md` | Bio evaluation prompt (used within account subagent) |
+| `prompts/seed_judge.md` | Legacy AI judge prompt (for reference) |
 | `schemas/input.json` | Input validation schema |
 | `schemas/output.json` | Output validation schema |
 | `scripts/search_news.py` | News search (Serper/SerpAPI/DuckDuckGo) |
 | `scripts/search_twstalker.py` | X/Twitter search via TwStalker (PRIMARY, Playwright) |
 | `scripts/search_nitter.py` | X/Twitter search via Nitter (FALLBACK, Playwright) |
+| `scripts/account_subagent_dispatcher.py` | Parallel account evaluation subagent dispatcher |
+| `scripts/bio_subagent_dispatcher.py` | Legacy bio-only subagent dispatcher (for reference) |
 
 ## Version
 
-v1.1 - Changed X search provider priority: TwStalker is now PRIMARY (more reliable), Nitter is FALLBACK.
+v2.0 - Complete architecture change: Per-account parallel subagents process all stages end-to-end after aggregation.
+
+**Changes in v2.0:**
+- **New Architecture**: After aggregation, EACH account is dispatched to a parallel subagent
+- **End-to-End Processing**: Each subagent handles anti-wave → prefilter → bio eval → AI judge → database prep
+- **New `account_subagent_parallel` parameter**: Controls parallel account processing (default: 10, max: 50)
+- **New `prompts/account_evaluation.md`**: Comprehensive end-to-end evaluation prompt
+- **New `scripts/account_subagent_dispatcher.py`**: Orchestrates parallel account subagents
+- **Removed `bio_subagent_parallel`**: Bio evaluation now happens within account subagents
+- **Better Scalability**: Can process 50-100+ accounts simultaneously
+- **Improved Isolation**: Each account processed independently, no shared state
+
+**Changes in v1.2:**
+- Added `use_bio_subagents` parameter (default: true) enables parallel bio evaluation
+- Added `bio_subagent_parallel` parameter controls concurrency (default: 5, max: 20)
+- Added `prompts/bio_judge.md` - specialized prompt for bio-only evaluation
+- Added `scripts/bio_subagent_dispatcher.py` - orchestrates parallel subagent dispatch
 
 **Changes in v1.1:**
 - TwStalker is now the default X search provider (better anti-detection, human challenge resolution)
