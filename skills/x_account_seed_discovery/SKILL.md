@@ -159,6 +159,18 @@ For agents (Claude Code, Opencode) that can run Playwright directly, use the age
 - **No API Keys**: Can use DuckDuckGo (free) instead of paid news APIs
 - **Direct Browser Control**: Agent controls browser to search and extract data
 - **Anti-Detection**: Random delays, human-like scrolling, custom user agents
+- **AdGuard Extension**: Blocks ads and trackers for cleaner scraping (optional but recommended)
+- **Sotwe.com Fallback**: Alternative proxy when X.com is inaccessible
+
+**Recommended Setup:**
+```bash
+# Install Playwright and stealth mode
+pip install playwright playwright-stealth
+playwright install chromium
+
+# Optional: Install AdGuard extension for better stealth
+# Download: https://chromewebstore.google.com/detail/adguard-adblocker/bgnkhhnnamicmpeenaelnjfhikgbkllg
+```
 
 **When to Use Agent Mode:**
 - You want to avoid API costs
@@ -174,11 +186,20 @@ and X profiles for topic="politics" region="Indonesia"
 
 The agent will:
 1. Read the agent instructions
-2. Use Playwright to search Google News
+2. Use Playwright to search Google News (or DuckDuckGo as fallback)
 3. Extract keywords from articles
 4. Use Playwright with stealth to search X.com
-5. Aggregate accounts and evaluate with AI
-6. Save results to SQLite
+5. **Fallback to sotwe.com** if X.com requires login or is blocked
+6. Aggregate accounts and evaluate with AI
+7. Save results to SQLite
+
+**X.com Fallback (Sotwe.com):**
+If X.com is inaccessible (requires login, rate limited, or blocked), the agent automatically uses **sotwe.com** as a proxy:
+- Search: `https://www.sotwe.com/search/{query}`
+- Profile: `https://www.sotwe.com/{handle}`
+- Example: `https://www.sotwe.com/prabowo`
+
+Sotwe.com provides public access to X/Twitter content without authentication, making it a reliable fallback when direct X.com access fails.
 
 ### 3. Run Discovery
 
