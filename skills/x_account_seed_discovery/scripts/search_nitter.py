@@ -49,11 +49,11 @@ nest_asyncio.apply()
 # Default Nitter instances (from https://github.com/zedeus/nitter/wiki/Instances)
 # Filtered: NO Cloudflare protected instances (Cloudflare actively blocks scrapers/automation)
 # Filtered: NO 403-blocked instances (nitter.poast.org always returns 403)
+# Filtered: NO blocking instances (nitter.tiekoetter.com blocks automation)
 # Verified March 2026: Working instances only
 DEFAULT_NITTER_INSTANCES = [
     "https://nitter.net",
     "https://nitter.privacyredirect.com",
-    "https://nitter.tiekoetter.com",
     "https://nitter.catsarch.com",
 ]
 
