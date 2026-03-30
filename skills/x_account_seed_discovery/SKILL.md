@@ -109,7 +109,6 @@ The skill uses multiple Nitter instances with automatic load balancing and rate 
 NITTER_INSTANCES = [
     "https://nitter.net",
     "https://nitter.privacyredirect.com",
-    "https://nitter.catsarch.com",
 ]
 ```
 
@@ -120,6 +119,7 @@ NITTER_INSTANCES = [
 - ❌ `nuku.trabun.org` (Cloudflare)
 - ❌ `nitter.poast.org` (Always returns 403)
 - ❌ `nitter.tiekoetter.com` (Blocks automation/scraping)
+- ❌ `nitter.catsarch.com` (Not working)
 
 See [Nitter Instances Wiki](https://github.com/zedeus/nitter/wiki/Instances) for the full list.
 

@@ -54,7 +54,6 @@ nest_asyncio.apply()
 DEFAULT_NITTER_INSTANCES = [
     "https://nitter.net",
     "https://nitter.privacyredirect.com",
-    "https://nitter.catsarch.com",
 ]
 
 # Load from environment or use defaults
