@@ -112,6 +112,32 @@ browser = p.chromium.launch(
 
 **Download:** https://chromewebstore.google.com/detail/adguard-adblocker/bgnkhhnnamicmpeenaelnjfhikgbkllg
 
+## X.com Fallback (Sotwe.com)
+
+If X.com is inaccessible, use **sotwe.com** proxy:
+
+**Search:** `https://www.sotwe.com/search/{query}`
+**Profile:** `https://www.sotwe.com/{handle}`
+
+```python
+# Quick sotwe.com search
+def search_sotwe(query):
+    page.goto(f"https://www.sotwe.com/search/{query.replace(' ', '%20')}")
+    posts = page.query_selector_all('.tweet-item, article')
+    return posts
+
+# Quick sotwe profile
+def get_sotwe_profile(handle):
+    page.goto(f"https://www.sotwe.com/{handle}")
+    # Extract profile data...
+```
+
+**When to use:**
+- X.com requires login
+- Rate limited on X.com
+- X.com blocked in region
+- More stable scraping needed
+
 ## Error Recovery
 
 ```python

@@ -611,6 +611,249 @@ def extract_profile_count(page, count_type):
     return None
 ```
 
+### Fallback: Using Sotwe.com Proxy (When X.com is Inaccessible)
+
+If X.com is blocked, requires login, or returns errors, use **sotwe.com** as a proxy:
+
+**Sotwe.com** is a Twitter/X proxy that provides public access to posts and profiles without authentication.
+
+#### Search Posts via Sotwe.com
+
+```python
+def search_sotwe_posts(query, max_posts=100):
+    """
+    Search X/Twitter posts via sotwe.com proxy.
+    
+    Args:
+        query: Search query (e.g., "politics Indonesia")
+        max_posts: Maximum posts to collect
+    
+    Returns:
+        List of post dicts with author info
+    """
+    from playwright.sync_api import sync_playwright
+    from playwright_stealth import stealth_sync
+    import time
+    import urllib.parse
+    
+    posts = []
+    
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            viewport={'width': 1920, 'height': 1080}
+        )
+        page = context.new_page()
+        stealth_sync(page)
+        
+        try:
+            # Build sotwe search URL
+            encoded_query = urllib.parse.quote(query)
+            url = f"https://www.sotwe.com/search/{encoded_query}"
+            
+            print(f"Searching sotwe.com: {query}")
+            page.goto(url, wait_until='networkidle')
+            
+            # Wait for content to load
+            page.wait_for_selector('.tweet-item, .post-item, [class*="tweet"]', timeout=15000)
+            
+            # Extract posts
+            # Note: Selectors may vary based on sotwe's current layout
+            post_selectors = [
+                '.tweet-item',
+                '.post-item',
+                'article',
+                '[class*="tweet"]',
+                '[class*="post"]'
+            ]
+            
+            post_elements = []
+            for selector in post_selectors:
+                post_elements = page.query_selector_all(selector)
+                if post_elements:
+                    break
+            
+            for elem in post_elements[:max_posts]:
+                try:
+                    # Extract author handle
+                    author_elem = elem.query_selector('a[href^="/"], .username, [class*="user"]')
+                    handle = ""
+                    if author_elem:
+                        href = author_elem.get_attribute('href') or ""
+                        handle = href.strip('/').split('/')[0] if href else author_elem.inner_text()
+                        handle = handle.lstrip('@')
+                    
+                    # Extract post text
+                    text_elem = elem.query_selector('.tweet-text, .post-text, [class*="text"], p')
+                    text = text_elem.inner_text() if text_elem else ""
+                    
+                    # Extract post URL
+                    link_elem = elem.query_selector('a[href*="/status/"], a[href*="/tweet/"]')
+                    post_url = ""
+                    if link_elem:
+                        href = link_elem.get_attribute('href') or ""
+                        post_url = f"https://www.sotwe.com{href}" if href.startswith('/') else href
+                    
+                    # Extract date/time
+                    time_elem = elem.query_selector('time, .time, [class*="date"]')
+                    post_time = time_elem.get_attribute('datetime') if time_elem else ""
+                    
+                    if handle and text:
+                        posts.append({
+                            'id': post_url.split('/')[-1] if post_url else str(hash(text))[:10],
+                            'text': text,
+                            'author_handle': handle,
+                            'author_display_name': handle,  # Sotwe may not show display name
+                            'url': post_url,
+                            'created_at': post_time,
+                            'query': query
+                        })
+                except:
+                    continue
+            
+            browser.close()
+            print(f"  Found {len(posts)} posts via sotwe.com")
+            
+        except Exception as e:
+            print(f"Error searching sotwe.com: {e}")
+            browser.close()
+    
+    return posts
+```
+
+#### Get Profile via Sotwe.com
+
+```python
+def get_sotwe_profile(handle):
+    """
+    Get X/Twitter profile via sotwe.com proxy.
+    
+    Args:
+        handle: X handle (with or without @)
+    
+    Returns:
+        Dict with profile information or None
+    """
+    from playwright.sync_api import sync_playwright
+    from playwright_stealth import stealth_sync
+    
+    handle = handle.lstrip('@')
+    
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            viewport={'width': 1920, 'height': 1080}
+        )
+        page = context.new_page()
+        stealth_sync(page)
+        
+        try:
+            url = f"https://www.sotwe.com/{handle}"
+            print(f"Fetching profile via sotwe.com: @{handle}")
+            
+            page.goto(url, wait_until='networkidle')
+            
+            # Wait for profile to load
+            page.wait_for_selector('[class*="profile"], .user-info, h1', timeout=15000)
+            
+            profile = {'handle': handle, 'profile_url': url}
+            
+            # Display name
+            name_elem = page.query_selector('h1, .profile-name, [class*="name"]')
+            if name_elem:
+                profile['display_name'] = name_elem.inner_text().strip()
+            
+            # Bio
+            bio_elem = page.query_selector('.bio, .description, [class*="bio"], [class*="description"]')
+            if bio_elem:
+                profile['bio'] = bio_elem.inner_text()
+            
+            # Stats (followers, following, posts)
+            stats_elems = page.query_selector_all('.stat, [class*="stat"], [class*="count"]')
+            for stat in stats_elems:
+                try:
+                    text = stat.inner_text().lower()
+                    value_elem = stat.query_selector('.value, [class*="value"], span, strong')
+                    if not value_elem:
+                        continue
+                    
+                    value_text = value_elem.inner_text()
+                    value_text = value_text.replace(',', '').replace('K', '000').replace('M', '000000')
+                    numbers = re.findall(r'\d+', value_text)
+                    
+                    if numbers:
+                        value = int(numbers[0])
+                        if 'follower' in text or 'pengikut' in text:
+                            profile['followers_count'] = value
+                        elif 'following' in text or 'diikuti' in text:
+                            profile['following_count'] = value
+                        elif 'post' in text or 'tweet' in text:
+                            profile['post_count'] = value
+                except:
+                    continue
+            
+            # Profile image
+            img_elem = page.query_selector('.avatar img, .profile-image img, [class*="avatar"] img')
+            if img_elem:
+                profile['profile_image_url'] = img_elem.get_attribute('src')
+            
+            # Verified badge
+            profile['verified'] = bool(page.query_selector('.verified, [class*="verified"], [class*="badge"]'))
+            
+            browser.close()
+            print(f"  ✓ Profile fetched: {profile.get('display_name', handle)}")
+            return profile
+            
+        except Exception as e:
+            print(f"  ✗ Error fetching profile via sotwe.com: {e}")
+            browser.close()
+            return None
+```
+
+#### When to Use Sotwe.com
+
+**Use sotwe.com when:**
+- X.com requires login/authentication
+- X.com returns rate limit errors
+- X.com is blocked in your region
+- X.com layout changes break selectors
+- You want simpler, more stable scraping
+
+**Limitations:**
+- May not have all posts (only cached/public ones)
+- Profile data may be less detailed
+- Rate limits still apply
+- Site availability depends on sotwe.com uptime
+
+**Example Usage:**
+
+```python
+# Try X.com first, fallback to sotwe.com
+def search_posts_with_fallback(queries, max_posts=300):
+    all_posts = []
+    
+    for query in queries:
+        # Try X.com first
+        try:
+            posts = search_x_posts([query], max_posts=50)
+            if posts:
+                all_posts.extend(posts)
+                continue
+        except Exception as e:
+            print(f"X.com failed for '{query}': {e}")
+        
+        # Fallback to sotwe.com
+        try:
+            posts = search_sotwe_posts(query, max_posts=50)
+            if posts:
+                all_posts.extend(posts)
+                print(f"Using sotwe.com fallback for '{query}'")
+        except Exception as e:
+            print(f"Sotwe.com also failed for '{query}': {e}")
+    
+    return all_posts
+```
+
 ## Step 4: Aggregate Accounts from Posts
 
 ```python
