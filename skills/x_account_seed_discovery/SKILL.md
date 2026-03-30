@@ -83,7 +83,10 @@ Export eligible accounts
 | `max_x_posts` | 300 | X posts to search |
 | `max_accounts_to_aggregate` | 100 | Accounts to collect from X posts |
 | `max_accounts_to_evaluate` | 100 | Accounts for AI evaluation |
-| `min_accounts_to_evaluate` | 1 | Minimum accounts required (run fails if fewer) |
+| `min_accounts_to_evaluate` | 1 | Minimum accounts required (triggers auto-loop if not met) |
+| `enable_auto_loop` | true | Auto-expand search when minimum not met |
+| `max_loops` | 3 | Maximum expansion loops |
+| `duplicate_threshold_percent` | 90 | Stop if >90% accounts already captured |
 | `anti_wave_mode` | true | Filter opportunistic accounts |
 | `save_mode` | `all` | `all` or `eligible_only` |
 
@@ -330,6 +333,76 @@ Blocklist keywords and pattern matching catch most noise before AI evaluation.
 - **Missing provider data:** Continue with available fields
 - **DB errors:** Fatal only for persistence/init failures
 - **Always produces:** Summary with partial results
+
+## Auto-Expansion Loop
+
+When `enable_auto_loop: true` (default), the skill automatically expands the search if `min_accounts_to_evaluate` is not met in the first pass.
+
+### How It Works
+
+```
+Loop 1: Search with base parameters
+  ↓
+Check: accounts_evaluated >= min_accounts_to_evaluate?
+  ↓ YES → Done
+  ↓ NO → Continue to Loop 2
+Loop 2: Search with expanded parameters (1.5x news, 1.5x keywords)
+  ↓
+Check: accounts_evaluated >= min_accounts_to_evaluate?
+  ↓ YES → Done
+  ↓ NO → Continue to Loop 3 (up to max_loops)
+Loop 3+: Repeat until min_met or stopping condition reached
+```
+
+### Stopping Conditions
+
+The loop stops when any of these conditions are met:
+
+1. **Minimum met** (`min_met`): Enough accounts passed filters and were evaluated
+2. **Max loops reached** (`max_loops_reached`): Executed `max_loops` iterations (default: 3)
+3. **Duplicate threshold** (`duplicate_threshold`): >90% of accounts found were already captured in previous loops
+4. **Error** (`error`): Unrecoverable error occurred during loop
+
+### Loop Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `enable_auto_loop` | `true` | Enable automatic expansion |
+| `max_loops` | `3` | Maximum loop iterations |
+| `duplicate_threshold_percent` | `90` | Stop if >90% duplicates |
+| `loop_news_multiplier` | `1.5` | Multiply news articles each loop |
+| `loop_keywords_multiplier` | `1.5` | Multiply keywords each loop |
+
+### Example: Loop in Action
+
+```json
+{
+  "topic": "mining policy",
+  "region": "Indonesia",
+  "min_accounts_to_evaluate": 20,
+  "enable_auto_loop": true,
+  "max_loops": 3,
+  "max_news_articles": 20,
+  "loop_news_multiplier": 1.5
+}
+```
+
+**Loop 1:** 20 news articles → 35 keywords → 85 accounts found → 12 pass filters ❌ (need 20)
+**Loop 2:** 30 news articles (+50%) → 52 keywords → 78 accounts found → 45 duplicates → 33 new → 28 total pass filters ✅ (exceeds 20)
+
+**Result:** `loop_count: 2`, `loop_stopped_reason: "min_met"`, `accounts_duplicate_percentage: 57.7`
+
+### Disabling Auto-Loop
+
+To disable and fail fast when minimum isn't met:
+
+```json
+{
+  "topic": "politics",
+  "min_accounts_to_evaluate": 50,
+  "enable_auto_loop": false
+}
+```
 
 ## Performance Tips
 

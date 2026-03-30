@@ -239,8 +239,88 @@ if (accountsAfterFiltering < min_accounts_to_evaluate) {
 ```
 
 - `min_accounts_to_evaluate` default: 1 (no minimum requirement)
-- If set higher, run will fail/warn if fewer accounts pass all filters
+- If set higher, run will trigger auto-loop or fail/warn if disabled
 - Useful for ensuring sufficient sample size for meaningful results
+
+### 8.2 Auto-Expansion Loop
+
+When minimum accounts aren't met, the skill can automatically expand the search:
+
+**Loop Algorithm:**
+
+```javascript
+async function executeLoop(loopNumber, previousKeywords, capturedAccounts) {
+  // 1. Calculate expanded parameters
+  const expandedNewsArticles = Math.floor(
+    max_news_articles * Math.pow(loop_news_multiplier, loopNumber - 1)
+  );
+  const expandedKeywords = Math.floor(
+    max_keywords * Math.pow(loop_keywords_multiplier, loopNumber - 1)
+  );
+  
+  // 2. Search news with previous keywords as context
+  const newsArticles = await searchNewsArticles({
+    topic,
+    region,
+    maxArticles: expandedNewsArticles,
+    excludeUrls: previouslyFetchedUrls,
+    relatedToKeywords: previousKeywords
+  });
+  
+  // 3. Extract new keywords
+  const newKeywords = await extractKeywords(newsArticles, {
+    excludeKeywords: previousKeywords,
+    maxKeywords: expandedKeywords
+  });
+  
+  // 4. Search X posts
+  const xPosts = await searchXPosts({
+    queries: buildQueries(topic, region, newKeywords),
+    maxPosts: max_x_posts
+  });
+  
+  // 5. Aggregate accounts
+  const newAccounts = aggregateAccounts(xPosts);
+  
+  // 6. Calculate duplicates
+  const duplicateCount = newAccounts.filter(acc => 
+    capturedAccounts.has(acc.handle_normalized)
+  ).length;
+  const duplicatePercentage = (duplicateCount / newAccounts.length) * 100;
+  
+  // 7. Check stopping conditions
+  if (duplicatePercentage > duplicate_threshold_percent) {
+    return { stoppedReason: 'duplicate_threshold', loopNumber, duplicatePercentage };
+  }
+  
+  // 8. Apply filters and evaluate
+  const filteredAccounts = applyFilters(newAccounts);
+  const evaluatedAccounts = await evaluateWithAI(filteredAccounts);
+  
+  // 9. Update captured accounts
+  evaluatedAccounts.forEach(acc => capturedAccounts.add(acc.handle_normalized));
+  
+  // 10. Check if minimum met
+  if (capturedAccounts.size >= min_accounts_to_evaluate) {
+    return { stoppedReason: 'min_met', loopNumber, totalEvaluated: capturedAccounts.size };
+  }
+  
+  // 11. Check max loops
+  if (loopNumber >= max_loops) {
+    return { stoppedReason: 'max_loops_reached', loopNumber };
+  }
+  
+  // 12. Continue to next loop
+  return executeLoop(loopNumber + 1, [...previousKeywords, ...newKeywords], capturedAccounts);
+}
+```
+
+**Stopping Conditions:**
+
+1. **min_met**: `totalEvaluated >= min_accounts_to_evaluate`
+2. **max_loops_reached**: `loopNumber >= max_loops`
+3. **duplicate_threshold**: `duplicatePercentage > duplicate_threshold_percent`
+4. **error**: Unrecoverable error in any stage
 
 **Prompt Structure:**
 ```markdown

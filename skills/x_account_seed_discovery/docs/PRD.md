@@ -237,6 +237,11 @@ Skill harus menerima input berikut.
 - `max_accounts_to_aggregate`
 - `max_accounts_to_evaluate`
 - `min_accounts_to_evaluate`
+- `enable_auto_loop` default `true`
+- `max_loops` default `3`
+- `duplicate_threshold_percent` default `90`
+- `loop_news_multiplier` default `1.5`
+- `loop_keywords_multiplier` default `1.5`
 - `anti_wave_mode` default `true`
 - `save_mode` (`all`, `eligible_only`)
 - `custom_prompt_appendix`
@@ -258,7 +263,10 @@ Skill harus menerima input berikut.
   "max_x_posts": 300,
   "max_accounts_to_aggregate": 100,
   "max_accounts_to_evaluate": 100,
-  "min_accounts_to_evaluate": 1,
+  "min_accounts_to_evaluate": 10,
+  "enable_auto_loop": true,
+  "max_loops": 3,
+  "duplicate_threshold_percent": 90,
   "anti_wave_mode": true,
   "save_mode": "all"
 }
@@ -527,6 +535,54 @@ Produk harus dapat diimplementasikan sebagai:
 - local tool JSON contract
 - command runner pada Claude Code, Opencode, atau agentic runtime lain
 
+### FR-17 — Auto-Expansion Loop
+
+Skill harus mendukung auto-expansion loop ketika `min_accounts_to_evaluate` tidak tercapai.
+
+#### Loop Parameters
+
+- `enable_auto_loop` default `true`
+- `max_loops` default `3`
+- `duplicate_threshold_percent` default `90`
+- `loop_news_multiplier` default `1.5`
+- `loop_keywords_multiplier` default `1.5`
+
+#### Loop Logic
+
+1. Jalankan pipeline normal (Loop 1)
+2. Hitung jumlah akun yang lolos filter dan dievaluasi AI
+3. Jika >= `min_accounts_to_evaluate`: selesai
+4. Jika < `min_accounts_to_evaluate` dan `enable_auto_loop=true`:
+   - Increment loop counter
+   - Expand search dengan multiplier:
+     - `max_news_articles` × `loop_news_multiplier`
+     - `max_keywords` × `loop_keywords_multiplier`
+   - Cari artikel berita baru dengan keyword dari loop sebelumnya
+   - Ekstrak keyword baru
+   - Cari post X baru
+   - Agregasi akun baru
+   - Hitung duplikat: akun yang sudah tercapture di loop sebelumnya
+   - Jika duplikat > `duplicate_threshold_percent`: stop loop
+   - Ulangi sampai min_met atau stopping condition tercapai
+
+#### Stopping Conditions
+
+Loop berhenti jika salah satu terpenuhi:
+
+1. `min_met`: Jumlah akun yang dievaluasi >= `min_accounts_to_evaluate`
+2. `max_loops_reached`: Sudah menjalankan `max_loops` iterasi
+3. `duplicate_threshold`: Persentase akun duplikat > `duplicate_threshold_percent`
+4. `error`: Terjadi error unrecoverable
+
+#### Output Loop Tracking
+
+Skill harus mengoutput:
+
+- `loop_count`: Jumlah loop yang dieksekusi
+- `loop_stopped_reason`: Alasan loop berhenti
+- `accounts_duplicate_percentage`: Persentase akun duplikat
+- `loop_details`: Array detail per loop (news fetched, keywords, accounts found, duplicates, new accounts)
+
 ---
 
 ## 14. AI Evaluation Rubric
@@ -598,6 +654,10 @@ Fields:
 - `total_uncertain`
 - `min_accounts_required`
 - `min_accounts_met`
+- `loop_count`
+- `loop_stopped_reason`
+- `accounts_duplicate_percentage`
+- `loop_details_json`
 
 ### 15.2 Table: `news_articles`
 
@@ -739,7 +799,30 @@ Fields:
   "updated_accounts": 40,
   "skipped_duplicates": 25,
   "min_accounts_met": true,
-  "min_accounts_required": 1,
+  "min_accounts_required": 10,
+  "loop_count": 2,
+  "loop_stopped_reason": "min_met",
+  "accounts_duplicate_percentage": 45.5,
+  "loop_details": [
+    {
+      "loop_number": 1,
+      "news_articles_fetched": 20,
+      "keywords_extracted": 35,
+      "x_posts_searched": 300,
+      "accounts_found": 85,
+      "accounts_duplicate": 0,
+      "accounts_new": 85
+    },
+    {
+      "loop_number": 2,
+      "news_articles_fetched": 30,
+      "keywords_extracted": 52,
+      "x_posts_searched": 450,
+      "accounts_found": 78,
+      "accounts_duplicate": 45,
+      "accounts_new": 33
+    }
+  ],
   "eligible_accounts": [
     {
       "handle": "example",

@@ -30,6 +30,10 @@ CREATE TABLE IF NOT EXISTS runs (
     total_uncertain INTEGER DEFAULT 0,
     min_accounts_required INTEGER DEFAULT 1,
     min_accounts_met BOOLEAN DEFAULT TRUE,
+    loop_count INTEGER DEFAULT 0,
+    loop_stopped_reason TEXT,
+    accounts_duplicate_percentage REAL DEFAULT 0,
+    loop_details_json TEXT,
     error_message TEXT
 );
 
@@ -229,6 +233,9 @@ SELECT
     r.total_uncertain,
     r.min_accounts_required,
     r.min_accounts_met,
+    r.loop_count,
+    r.loop_stopped_reason,
+    r.accounts_duplicate_percentage,
     CASE 
         WHEN r.finished_at IS NOT NULL 
         THEN ROUND((julianday(r.finished_at) - julianday(r.started_at)) * 86400, 2)

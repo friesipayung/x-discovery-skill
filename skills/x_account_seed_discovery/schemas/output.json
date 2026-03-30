@@ -227,6 +227,59 @@
       "type": "integer",
       "description": "Minimum accounts required for evaluation",
       "minimum": 0
+    },
+    "loop_count": {
+      "type": "integer",
+      "description": "Number of expansion loops executed",
+      "minimum": 0
+    },
+    "loop_stopped_reason": {
+      "type": "string",
+      "description": "Reason why looping stopped",
+      "enum": ["min_met", "max_loops_reached", "duplicate_threshold", "error", "not_enabled"]
+    },
+    "accounts_duplicate_percentage": {
+      "type": "number",
+      "description": "Percentage of accounts that were already captured in previous loops",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "loop_details": {
+      "type": "array",
+      "description": "Details of each loop iteration",
+      "items": {
+        "type": "object",
+        "properties": {
+          "loop_number": {
+            "type": "integer",
+            "description": "Loop iteration number (1-based)"
+          },
+          "news_articles_fetched": {
+            "type": "integer",
+            "description": "Number of news articles fetched in this loop"
+          },
+          "keywords_extracted": {
+            "type": "integer",
+            "description": "Number of keywords extracted in this loop"
+          },
+          "x_posts_searched": {
+            "type": "integer",
+            "description": "Number of X posts searched in this loop"
+          },
+          "accounts_found": {
+            "type": "integer",
+            "description": "Number of unique accounts found in this loop"
+          },
+          "accounts_duplicate": {
+            "type": "integer",
+            "description": "Number of accounts already captured in previous loops"
+          },
+          "accounts_new": {
+            "type": "integer",
+            "description": "Number of new accounts discovered in this loop"
+          }
+        }
+      }
     }
   },
   "additionalProperties": false,
@@ -262,7 +315,30 @@
       ],
       "errors": [],
       "min_accounts_met": true,
-      "min_accounts_required": 1,
+      "min_accounts_required": 10,
+      "loop_count": 2,
+      "loop_stopped_reason": "min_met",
+      "accounts_duplicate_percentage": 45.5,
+      "loop_details": [
+        {
+          "loop_number": 1,
+          "news_articles_fetched": 20,
+          "keywords_extracted": 35,
+          "x_posts_searched": 300,
+          "accounts_found": 85,
+          "accounts_duplicate": 0,
+          "accounts_new": 85
+        },
+        {
+          "loop_number": 2,
+          "news_articles_fetched": 30,
+          "keywords_extracted": 52,
+          "x_posts_searched": 450,
+          "accounts_found": 78,
+          "accounts_duplicate": 45,
+          "accounts_new": 33
+        }
+      ],
       "started_at": "2026-03-30T10:00:00Z",
       "finished_at": "2026-03-30T10:15:30Z",
       "duration_seconds": 930,
