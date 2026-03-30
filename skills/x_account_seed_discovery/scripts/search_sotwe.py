@@ -77,6 +77,7 @@ class SotweSearcher:
         headless: bool = False,  # Headful required for extensions
         stealth: bool = True,
         delay_range: tuple = (2, 5),
+        chrome_profile_dir: Optional[str] = None,
     ):
         """
         Initialize sotwe searcher.
@@ -86,11 +87,13 @@ class SotweSearcher:
             headless: Whether to run headless (False required for extensions)
             stealth: Whether to use playwright-stealth
             delay_range: Random delay range between actions (min, max seconds)
+            chrome_profile_dir: Path to Chrome user data directory (profile)
         """
         self.adguard_path = adguard_path
         self.headless = headless
         self.stealth = stealth
         self.delay_range = delay_range
+        self.chrome_profile_dir = chrome_profile_dir
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self._playwright = None
@@ -105,7 +108,7 @@ class SotweSearcher:
         self.close()
 
     def _init_browser(self):
-        """Initialize browser with AdGuard extension."""
+        """Initialize browser with AdGuard extension and optional Chrome profile."""
         self._playwright = sync_playwright().start()
 
         # Build launch arguments
@@ -126,10 +129,20 @@ class SotweSearcher:
             )
             print(f"Loading AdGuard extension from: {adguard_path}")
 
+        # Build browser launch options
+        launch_options = {
+            "headless": self.headless,
+            "args": args,
+        }
+
+        # Add Chrome profile if specified
+        if self.chrome_profile_dir:
+            profile_path = str(Path(self.chrome_profile_dir).resolve())
+            launch_options["user_data_dir"] = profile_path
+            print(f"Using Chrome profile: {profile_path}")
+
         # Launch browser
-        self.browser = self._playwright.chromium.launch(
-            headless=self.headless, args=args
-        )
+        self.browser = self._playwright.chromium.launch(**launch_options)
 
         # Create context with realistic viewport and user agent
         self.context = self.browser.new_context(
@@ -196,7 +209,7 @@ class SotweSearcher:
                     print("  - Try nitter.net or other X/Twitter viewers")
                     print("  - Use the official X API instead")
                     print("\nWaiting 10 seconds before closing browser...")
-                    time.sleep(10)  # Wait so user can see the browser
+                    time.sleep(30)  # Wait so user can see the browser
                     return posts
                 raise
 
@@ -532,6 +545,12 @@ def main():
     # Common options
     parser.add_argument("--adguard-path", help="Path to AdGuard extension")
     parser.add_argument(
+        "--profile",
+        "-p",
+        default=str(Path.home() / ".x-discovery" / "chrome-profile"),
+        help="Path to Chrome profile directory (default: ~/.x-discovery/chrome-profile)",
+    )
+    parser.add_argument(
         "--headless", action="store_true", help="Run headless (no extension support)"
     )
     parser.add_argument(
@@ -559,6 +578,7 @@ def main():
             headless=args.headless,
             stealth=not args.no_stealth,
             delay_range=delay_range,
+            chrome_profile_dir=args.profile,
         ) as searcher:
             if args.command == "search":
                 print(f"Searching posts: '{args.query}'")

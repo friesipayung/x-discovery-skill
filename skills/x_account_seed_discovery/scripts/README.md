@@ -34,12 +34,18 @@ python search_sotwe.py profile prabowo --output profile.json
 python search_sotwe.py search --query "mining policy" \
     --adguard-path /path/to/adguard-extension \
     --max-results 100
+
+# With custom Chrome profile
+python search_sotwe.py search --query "indonesia" \
+    --profile ~/.x-discovery/chrome-profile \
+    --max-results 50
 ```
 
 **Features:**
 - Uses sotwe.com as X/Twitter proxy (no X API needed)
 - Playwright with stealth mode for anti-detection
 - AdGuard extension support for cleaner scraping (requires headful mode)
+- **Dedicated Chrome profile** - persists cookies and session data
 - Automatic scrolling to load more content
 - Parses posts, engagement metrics, and profile info
 
@@ -65,6 +71,40 @@ For cleaner scraping with `search_sotwe.py`:
 2. Extract the extension to a folder (or use the .crx file path)
 
 3. Use with `--adguard-path` flag
+
+### 3. Chrome Profile (Recommended)
+
+`search_sotwe.py` uses a dedicated Chrome profile to persist cookies and session data:
+
+**Default profile location:** `~/.x-discovery/chrome-profile`
+
+**Create and manage the profile:**
+```bash
+# Create the X-Discovery Chrome profile
+python chrome_profile.py create
+
+# Test the profile (opens Chrome manually)
+python chrome_profile.py test
+
+# View profile info
+python chrome_profile.py info
+```
+
+**Why use a dedicated profile:**
+- Persists cookies and login sessions
+- Isolates automation from your main Chrome
+- Allows pre-logging into sites manually
+- Maintains state between script runs
+
+**Manual Chrome launch with profile:**
+```bash
+# macOS
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\\ Chrome \
+    --user-data-dir="$HOME/.x-discovery/chrome-profile"
+
+# Linux
+google-chrome --user-data-dir="$HOME/.x-discovery/chrome-profile"
+```
 
 ## Examples
 
