@@ -175,6 +175,75 @@ class TwStalkerSearcher:
         jitter = random.uniform(0, 1)
         return base + jitter
 
+    def _is_cloudflare_challenge(self, page) -> bool:
+        """
+        Check if page is showing a Cloudflare challenge/CAPTCHA.
+        Returns True if it's a challenge page.
+        """
+        html = page.content()
+        title = page.title()
+
+        # Cloudflare challenge indicators
+        challenge_indicators = [
+            "just a moment" in title.lower(),
+            "checking your browser" in html.lower(),
+            "one more step" in html.lower(),
+            "please complete the security check" in html.lower(),
+            "cf-im-under-attack" in html.lower(),
+            "cf-browser-verification" in html.lower(),
+            page.locator('input[name="cf-turnstile-response"]').count() > 0,
+            page.locator('[class*="cf-"][class*="challenge"]').count() > 0,
+            page.locator('text="Verify you are human"').count() > 0,
+        ]
+
+        return any(challenge_indicators)
+
+    def _wait_for_cloudflare_resolution(self, page):
+        """
+        Wait for human to solve Cloudflare challenge.
+        Only works in headful mode - will fail in headless.
+        """
+        if self.headless:
+            print("⚠️  Cloudflare challenge detected but running in HEADLESS mode!")
+            print(
+                "   Cannot solve challenge automatically. Use without --headless flag"
+            )
+            return False
+
+        print("\n" + "=" * 60)
+        print("🔒 CLOUDFLARE CHALLENGE DETECTED")
+        print("=" * 60)
+        print("\nThe browser is showing a security challenge.")
+        print("Please complete it manually in the browser window:")
+        print("  1. Check the 'I'm not a robot' box if shown")
+        print("  2. Solve any CAPTCHA presented")
+        print("  3. Wait for the page to load completely")
+        print("\n⏳ Waiting for you to complete the challenge...")
+        print("   (Will auto-detect when done, or timeout after 5 min)\n")
+
+        # Poll for resolution
+        max_wait = 300  # 5 minutes max
+        check_interval = 2  # Check every 2 seconds
+        elapsed = 0
+
+        while elapsed < max_wait:
+            time.sleep(check_interval)
+            elapsed += check_interval
+
+            # Check if challenge is resolved
+            if not self._is_cloudflare_challenge(page):
+                print("✅ Challenge appears to be resolved!")
+                # Wait a bit more for page to fully load
+                time.sleep(3)
+                return True
+
+            # Show progress every 30 seconds
+            if elapsed % 30 == 0:
+                print(f"   ... still waiting ({elapsed}s elapsed)")
+
+        print(f"\n⏱️  Timeout after {max_wait}s. Challenge not resolved.")
+        return False
+
     def search_profiles(self, query: str, max_results: int = 50) -> List[XProfile]:
         """
         Search for profiles on TwStalker with rate limit respect.
@@ -203,15 +272,43 @@ class TwStalkerSearcher:
                 time.sleep(3)
                 self._random_delay()
 
-                # Check for rate limiting
+                # Check for rate limiting or Cloudflare challenge
                 if self._handle_rate_limit_response(page):
-                    backoff = self._exponential_backoff(attempt)
-                    print(
-                        f"⚠️ Rate limited or blocked. Backing off for {backoff:.1f}s..."
-                    )
-                    page.close()
-                    time.sleep(backoff)
-                    continue
+                    # Check if it's specifically a Cloudflare challenge
+                    if self._is_cloudflare_challenge(page):
+                        # Try to wait for human resolution
+                        resolved = self._wait_for_cloudflare_resolution(page)
+                        if resolved:
+                            # Challenge resolved, continue with parsing
+                            html = page.content()
+                            profiles = self._parse_search_results(html, max_results)
+                            page.close()
+                            if profiles:
+                                print(
+                                    f"✓ Found {len(profiles)} profiles after challenge"
+                                )
+                                break
+                            else:
+                                print(f"⚠️ No profiles found after challenge resolution")
+                                continue
+                        else:
+                            # Challenge not resolved, use backoff
+                            backoff = self._exponential_backoff(attempt)
+                            print(
+                                f"⚠️ Challenge not resolved. Backing off for {backoff:.1f}s..."
+                            )
+                            page.close()
+                            time.sleep(backoff)
+                            continue
+                    else:
+                        # Regular rate limit (not Cloudflare), use backoff
+                        backoff = self._exponential_backoff(attempt)
+                        print(
+                            f"⚠️ Rate limited or blocked. Backing off for {backoff:.1f}s..."
+                        )
+                        page.close()
+                        time.sleep(backoff)
+                        continue
 
                 # Parse results
                 html = page.content()
@@ -344,15 +441,43 @@ class TwStalkerSearcher:
                 time.sleep(3)
                 self._random_delay()
 
-                # Check for rate limiting
+                # Check for rate limiting or Cloudflare challenge
                 if self._handle_rate_limit_response(page):
-                    backoff = self._exponential_backoff(attempt)
-                    print(
-                        f"⚠️ Rate limited or blocked. Backing off for {backoff:.1f}s..."
-                    )
-                    page.close()
-                    time.sleep(backoff)
-                    continue
+                    # Check if it's specifically a Cloudflare challenge
+                    if self._is_cloudflare_challenge(page):
+                        # Try to wait for human resolution
+                        resolved = self._wait_for_cloudflare_resolution(page)
+                        if resolved:
+                            # Challenge resolved, continue with parsing
+                            html = page.content()
+                            profile = self._parse_profile(html, handle)
+                            page.close()
+                            if profile:
+                                print(
+                                    f"✓ Found profile: @{profile.handle} after challenge"
+                                )
+                                break
+                            else:
+                                print(f"⚠️ Profile not found after challenge resolution")
+                                continue
+                        else:
+                            # Challenge not resolved, use backoff
+                            backoff = self._exponential_backoff(attempt)
+                            print(
+                                f"⚠️ Challenge not resolved. Backing off for {backoff:.1f}s..."
+                            )
+                            page.close()
+                            time.sleep(backoff)
+                            continue
+                    else:
+                        # Regular rate limit (not Cloudflare), use backoff
+                        backoff = self._exponential_backoff(attempt)
+                        print(
+                            f"⚠️ Rate limited or blocked. Backing off for {backoff:.1f}s..."
+                        )
+                        page.close()
+                        time.sleep(backoff)
+                        continue
 
                 html = page.content()
                 profile = self._parse_profile(html, handle)
