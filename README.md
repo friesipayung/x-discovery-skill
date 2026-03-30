@@ -2,6 +2,10 @@
 
 An agentic skill for discovering quality X.com (Twitter) seed accounts using a news-first approach. This skill finds accounts that genuinely discuss specific topics by grounding search in actual news articles, filtering opportunistic accounts, and using AI judgment with SQLite persistence.
 
+**Quick Reference:**
+- 🧑‍💻 **Using this skill?** → See [SKILL.md](skills/x_account_seed_discovery/SKILL.md) for complete usage guide
+- 🔧 **Developing/contributing?** → See [AGENTS.md](AGENTS.md) for development guidelines
+
 ## 🎯 What This Does
 
 Instead of searching X profiles by bio keywords (which often returns irrelevant accounts), this skill:
@@ -204,56 +208,12 @@ You can also use the skill schemas and prompts directly:
 
 ## 🚀 Quick Start
 
-### 1. Initialize Database
+**Skill users:** See [SKILL.md](skills/x_account_seed_discovery/SKILL.md#implementation-details) for detailed setup instructions.
 
-```bash
-# Create the config directory
-mkdir -p ~/.x-discovery
-
-# Initialize the database
-sqlite3 ~/.x-discovery/seed.sql < skills/x_account_seed_discovery/sql/schema.sql
-```
-
-### 2. Set Environment Variables
-
-```bash
-export SQLITE_PATH="$HOME/.x-discovery/seed.sql"
-export DEFAULT_REGION="Indonesia"
-# Set your news/X search provider credentials as needed
-```
-
-### 3. Run Discovery
-
-**Using Claude Code:**
-```
-@x_account_seed_discovery with topic="politics" region="Indonesia" min_followers=5000
-```
-
-**Using Opencode:**
-```bash
-opencode run skill x_account_seed_discovery --input '{
-  "topic": "mining policy",
-  "region": "Indonesia",
-  "min_followers": 10000,
-  "anti_wave_mode": true
-}'
-```
-
-**Direct JSON Input:**
-```json
-{
-  "topic": "government",
-  "region": "Indonesia",
-  "min_followers": 5000,
-  "max_news_articles": 20,
-  "max_x_posts": 300,
-  "max_accounts_to_aggregate": 100,
-  "max_accounts_to_evaluate": 100,
-  "min_accounts_to_evaluate": 1,
-  "anti_wave_mode": true,
-  "save_mode": "all"
-}
-```
+**Quick summary:**
+1. Initialize database: `sqlite3 ~/.x-discovery/seed.sql < skills/x_account_seed_discovery/sql/schema.sql`
+2. Set environment: `export SQLITE_PATH="$HOME/.x-discovery/seed.sql"`
+3. Run: `@x_account_seed_discovery with topic="politics" region="Indonesia"`
 
 ## 📊 Example Output
 
@@ -324,13 +284,14 @@ The skill uses SQLite with 7 tables:
 
 ## 📖 Documentation
 
-| Document | Purpose |
-|----------|---------|
-| [SKILL.md](skills/x_account_seed_discovery/SKILL.md) | Complete usage guide, workflow, examples |
-| [TECHNICAL_DESIGN.md](skills/x_account_seed_discovery/docs/TECHNICAL_DESIGN.md) | Architecture, provider interfaces, error handling |
-| [PRD.md](skills/x_account_seed_discovery/docs/PRD.md) | Full product requirements |
-| [sql/schema.sql](skills/x_account_seed_discovery/sql/schema.sql) | Database schema with indexes and views |
-| [prompts/seed_judge.md](skills/x_account_seed_discovery/prompts/seed_judge.md) | AI evaluation prompt template |
+| Document | Purpose | Audience |
+|----------|---------|----------|
+| [SKILL.md](skills/x_account_seed_discovery/SKILL.md) | Complete usage guide for skill agents | **Skill users** (Claude Code, Opencode, etc.) |
+| [AGENTS.md](AGENTS.md) | Development guidelines for contributors | **Developers** contributing to this repo |
+| [TECHNICAL_DESIGN.md](skills/x_account_seed_discovery/docs/TECHNICAL_DESIGN.md) | Architecture and implementation details | Developers |
+| [PRD.md](skills/x_account_seed_discovery/docs/PRD.md) | Full product requirements | Product/Stakeholders |
+| [sql/schema.sql](skills/x_account_seed_discovery/sql/schema.sql) | Database schema | Developers |
+| [prompts/seed_judge.md](skills/x_account_seed_discovery/prompts/seed_judge.md) | AI evaluation prompt | Developers |
 
 ## 🔧 Configuration Options
 
