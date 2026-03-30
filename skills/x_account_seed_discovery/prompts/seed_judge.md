@@ -44,14 +44,48 @@ Evaluate whether this X (Twitter) account is a quality seed account for monitori
 
 ## Evaluation Criteria
 
+### Target Account Type: Individual Real Users
+**Focus:** We are looking for **individual human accounts** - real people sharing personal perspectives, opinions, and experiences.
+
+**NOT desired:**
+- Government accounts (president, ministries, official government handles)
+- Organization/Institution accounts (political parties, NGOs, companies, media outlets)
+- Official news/media accounts
+- Brand/corporate accounts
+- Bot or automated accounts
+
+**Look for indicators of individual accounts:**
+- Personal display names (not institutional)
+- First-person language in posts
+- Personal opinions and perspectives
+- Mixed content showing human variety (not just official messaging)
+- Bio describes a person, not an organization
+- Handle doesn't contain "official", "gov", "kemen", "bps", "kpu", "dpr", etc.
+
 ### ELIGIBLE (Quality Seed Account)
 Use when ALL of these are true:
 - Account is clearly relevant to the topic "{{topic}}"
 - Account is relevant to {{region}} or discusses national/global issues applicable to the region
+- Account represents an **individual person** (not government, organization, institution, or brand)
 - Sample posts demonstrate consistent topical relevance (not just one-off mentions)
 - Account shows no significant spam, promotional, pornographic, gambling, or trend-hijacking signals
-- Account appears to be a genuine content creator, news source, or relevant participant in the topic space
+- Account appears to be a genuine **individual content creator** sharing personal perspectives
 - Account is worth monitoring as a seed for ongoing crawling
+
+### NOT_ELIGIBLE - Government/Organization (Auto-reject)
+Reject when account appears to be:
+- **Government accounts:** Handles like @jokowi, @kemenkes, @kpu_id, @dpr_ri, @bps_statistics, @pemerintah, official government ministry accounts
+- **Political party accounts:** @pdi_perjuangan, @gerindra, @golkar, etc.
+- **Institutional accounts:** Universities, government agencies, official bodies
+- **Media/News organization accounts:** @kompascom, @detikcom, @tvOneNews, @metrotvnews, official media handles
+- **Corporate/Brand accounts:** Company accounts, brand accounts
+- **NGO/Organization accounts:** @greenpeaceid, @amnestyindo, etc.
+
+**Key indicators:**
+- Bio uses institutional language ("Official account of...", "Akses informasi resmi...")
+- Handle contains government/org keywords
+- Posts read like official statements/press releases
+- Account represents an entity, not a person
 
 ### UNCERTAIN (Needs Review)
 Use when:
@@ -60,8 +94,9 @@ Use when:
 - Account metadata is incomplete or suspicious
 - Account might be relevant, but there's not enough proof to mark as eligible
 - Mixed signals - some relevance, but also some noise or concerns
+- Unclear if account is individual or organization
 
-### NOT_ELIGIBLE (Reject)
+### NOT_ELIGIBLE (Reject - General)
 Use when ANY of these are true:
 - Account is clearly off-topic or irrelevant to "{{topic}}"
 - Dominant content is spam, promotional, pornographic, gambling-related, or clickbait

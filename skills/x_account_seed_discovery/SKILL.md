@@ -7,9 +7,9 @@ description: Use when discovering X.com seed accounts for crawling based on news
 
 ## Overview
 
-Discover quality X.com seed accounts using a **news-first approach** that grounds account search in actual news topics rather than profile metadata alone. This skill extracts keywords from news articles, searches X posts using those keywords, and evaluates accounts based on their actual posting behavior with AI judgment.
+Discover quality **individual** X.com seed accounts using a **news-first approach** that grounds account search in actual news topics rather than profile metadata alone. This skill extracts keywords from news articles, searches X posts using those keywords, and evaluates **individual human accounts** (not government, organizations, or brands) based on their actual posting behavior with AI judgment.
 
-**Core principle:** Post evidence > bio claims. Relevance is proven through what accounts actually post, not what they claim in their profile.
+**Core principle:** Post evidence > bio claims. Relevance is proven through what accounts actually post, not what they claim in their profile. **Focus:** Individual real users only - no government, organization, institution, or brand accounts.
 
 ### What This Skill Does
 
@@ -17,21 +17,25 @@ Discover quality X.com seed accounts using a **news-first approach** that ground
 2. **Extracts keywords and entities** from those articles
 3. **Searches X posts** via Nitter instances using those keywords
 4. **Filters out spam/promo/opportunistic accounts** with aggressive anti-wave filtering
-5. **Uses AI to judge** which accounts are quality seed candidates
-6. **Saves results to SQLite** with full audit trail and no duplicates
+5. **Filters out government/organization/brand accounts** - keeping only individual users
+6. **Uses AI to judge** which accounts are quality seed candidates
+7. **Saves results to SQLite** with full audit trail and no duplicates
 
-**Result:** A curated list of X accounts that genuinely discuss your topic, ready for monitoring or crawling.
+**Result:** A curated list of **individual X accounts** that genuinely discuss your topic, ready for monitoring or crawling.
 
 ## When to Use
 
 **Use this skill when:**
-- You need seed accounts for X.com crawling/monitoring
+- You need **individual user accounts** for X.com crawling/monitoring (not government/org/brand accounts)
 - You want accounts that genuinely discuss specific topics (not just have keywords in bio)
 - You need to filter out opportunistic accounts, spam, promo, porn, gambling
+- You need to filter out government, organization, institution, and brand accounts
 - You want news-grounded discovery that follows actual current issues
 - You need persistent, auditable results with SQLite storage
 
 **Don't use when:**
+- You want government or official accounts
+- You want organization/institution/brand accounts
 - You just need random popular accounts
 - You want real-time monitoring (this is discovery, not monitoring)
 - You need deep engagement analytics
@@ -361,7 +365,23 @@ The skill aggressively filters opportunistic accounts that hijack trending topic
 
 ## AI Evaluation Rubric
 
+### Target: Individual Real Users Only
+This skill focuses on discovering **individual human accounts** sharing personal perspectives and opinions.
+
+**Explicitly EXCLUDED:**
+- Government accounts (presidents, ministries, official gov handles)
+- Organization/Institution accounts (political parties, NGOs, companies)
+- Media/News outlets (official news accounts)
+- Corporate/Brand accounts
+
+**Look for:**
+- Personal display names and bios
+- First-person language and opinions
+- Human variety in content (not just official statements)
+- Individual perspectives on topics
+
 ### Eligible
+- **Individual person** (not government/org/institution/brand)
 - Clearly relevant to topic AND region
 - Sample posts show topic consistency
 - No spam/promo/porn/gambling signals
@@ -371,9 +391,11 @@ The skill aggressively filters opportunistic accounts that hijack trending topic
 - Weak relevance signals
 - Too few sample posts
 - Incomplete metadata
+- Unclear if individual or organization
 - Possible relevance but not strong enough
 
 ### Not Eligible
+- Government/Organization/Institution/Brand account
 - Off-topic
 - Dominant spam/promo/porn/gambling/clickbait
 - Highly opportunistic
@@ -381,10 +403,12 @@ The skill aggressively filters opportunistic accounts that hijack trending topic
 - Only riding keyword trends without substance
 
 **AI instructions:**
+- **PRIORITY #1:** Verify account is an INDIVIDUAL person, not government/org/brand
 - Don't select just because account is big or verified
 - Don't select just because bio looks relevant
 - Sample posts matter more than bio
 - Opportunistic/trend hijackers get heavy penalty
+- Government/org accounts: REJECT regardless of relevance
 
 ## Data Persistence
 
