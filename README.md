@@ -113,7 +113,70 @@ x-discovery-skill/
 
 5. **Implement the orchestrator** (see [TECHNICAL_DESIGN.md](skills/x_account_seed_discovery/docs/TECHNICAL_DESIGN.md) for provider interfaces and implementation details)
 
-### Manual Usage (Without Agent Runtime)
+## 🔄 Updating
+
+To get the latest updates and improvements:
+
+### Claude Code
+
+If you cloned directly to the skills directory:
+```bash
+cd ~/.claude/skills/x-discovery-skill
+git pull origin main
+```
+
+If you used a symlink:
+```bash
+cd ~/tools/x-discovery-skill  # or wherever you cloned it
+git pull origin main
+# The symlink at ~/.claude/skills/x_account_seed_discovery will automatically reflect changes
+```
+
+**Note:** Claude Code automatically detects skill changes - no restart needed. Just start using the updated skill with `@x_account_seed_discovery`.
+
+### Opencode
+
+```bash
+cd ~/skills/x-discovery-skill  # or your custom path
+git pull origin main
+```
+
+**Note:** Opencode loads skills at startup. To use the updated skill:
+- **Option 1:** Restart Opencode
+- **Option 2:** Run `opencode reload` if your version supports hot-reload
+
+### Database Schema Updates
+
+If the update includes database schema changes:
+
+```bash
+# Backup your existing database first
+cp seeds.db seeds.db.backup.$(date +%Y%m%d)
+
+# Apply schema updates (safe to run - uses IF NOT EXISTS)
+sqlite3 seeds.db < skills/x_account_seed_discovery/sql/schema.sql
+```
+
+### Manual / Custom Implementation
+
+```bash
+cd /path/to/your/x-discovery-skill
+git pull origin main
+
+# Re-copy to your agent's skills directory if needed
+cp -r skills/x_account_seed_discovery /path/to/your/agent/skills/
+```
+
+### Checking Your Version
+
+To verify you're running the latest version:
+
+```bash
+cd /path/to/x-discovery-skill
+git log --oneline -5
+```
+
+### Other Agentic Tools / Custom Implementation
 
 You can also use the skill schemas and prompts directly:
 

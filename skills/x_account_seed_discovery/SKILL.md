@@ -338,6 +338,24 @@ Blocklist keywords and pattern matching catch most noise before AI evaluation.
 3. **Tight constraints:** Narrow `min_followers` and `region` to reduce noise
 4. **Review uncertain:** Check `uncertain` decisions to tune prompts
 
+## Updating the Skill
+
+To get the latest updates:
+
+```bash
+# Navigate to your skill directory
+cd ~/.claude/skills/x_account_seed_discovery  # or your custom path
+
+# Pull latest changes
+git pull origin main
+```
+
+**Claude Code:** Changes are detected automatically - no restart needed.
+
+**Opencode:** Restart or run `opencode reload` to load updates.
+
+See [README.md](../../README.md#updating) for detailed update instructions including database migrations.
+
 ## Files Reference
 
 | File | Purpose |
