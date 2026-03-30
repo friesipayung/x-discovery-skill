@@ -100,11 +100,12 @@ Export eligible accounts
 ### Quick Start (5 minutes)
 
 ```bash
-# 1. Setup database
-sqlite3 seeds.db < skills/x_account_seed_discovery/sql/schema.sql
+# 1. Create config directory and setup database
+mkdir -p ~/.x-discovery
+sqlite3 ~/.x-discovery/seed.sql < skills/x_account_seed_discovery/sql/schema.sql
 
 # 2. Set environment
-export SQLITE_PATH="seeds.db"
+export SQLITE_PATH="$HOME/.x-discovery/seed.sql"
 export DEFAULT_REGION="Indonesia"
 
 # 3. Run with Claude Code
@@ -122,15 +123,18 @@ Before using this skill, ensure you have:
 
 ### 1. Setup SQLite Database
 
-```sql
--- Run schema.sql to initialize tables
-sqlite3 seeds.db < skills/x_account_seed_discovery/sql/schema.sql
+```bash
+# Create the default config directory
+mkdir -p ~/.x-discovery
+
+# Run schema.sql to initialize tables
+sqlite3 ~/.x-discovery/seed.sql < skills/x_account_seed_discovery/sql/schema.sql
 ```
 
 ### 2. Configure Environment
 
 ```bash
-export SQLITE_PATH="seeds.db"
+export SQLITE_PATH="$HOME/.x-discovery/seed.sql"
 export DEFAULT_REGION="Indonesia"
 
 # Provider credentials (depends on your runtime and providers):
@@ -275,7 +279,7 @@ The skill returns a JSON summary including:
 
 ### 4. Export Results
 
-All data is persisted to the SQLite database specified in `SQLITE_PATH`. Query it directly:
+All data is persisted to the SQLite database at `$HOME/.x-discovery/seed.sql` (or your configured `SQLITE_PATH`). Query it directly:
 
 ```bash
 # Connect to your database

@@ -101,15 +101,17 @@ x-discovery-skill/
    ```
 
 3. **Initialize the database:**
-   ```bash
-   sqlite3 seeds.db < skills/x_account_seed_discovery/sql/schema.sql
-   ```
+    ```bash
+    # Create the config directory and initialize database
+    mkdir -p ~/.x-discovery
+    sqlite3 ~/.x-discovery/seed.sql < skills/x_account_seed_discovery/sql/schema.sql
+    ```
 
 4. **Set environment variables:**
-   ```bash
-   export SQLITE_PATH="$(pwd)/seeds.db"
-   export DEFAULT_REGION="Indonesia"
-   ```
+    ```bash
+    export SQLITE_PATH="$HOME/.x-discovery/seed.sql"
+    export DEFAULT_REGION="Indonesia"
+    ```
 
 5. **Implement the orchestrator** (see [TECHNICAL_DESIGN.md](skills/x_account_seed_discovery/docs/TECHNICAL_DESIGN.md) for provider interfaces and implementation details)
 
@@ -151,10 +153,10 @@ If the update includes database schema changes:
 
 ```bash
 # Backup your existing database first
-cp seeds.db seeds.db.backup.$(date +%Y%m%d)
+cp ~/.x-discovery/seed.sql ~/.x-discovery/seed.sql.backup.$(date +%Y%m%d)
 
 # Apply schema updates (safe to run - uses IF NOT EXISTS)
-sqlite3 seeds.db < skills/x_account_seed_discovery/sql/schema.sql
+sqlite3 ~/.x-discovery/seed.sql < skills/x_account_seed_discovery/sql/schema.sql
 ```
 
 ### Manual / Custom Implementation
@@ -195,22 +197,27 @@ You can also use the skill schemas and prompts directly:
    - Customize by replacing `{{variables}}` with your data
 
 4. **Set up the database:**
-   ```bash
-   sqlite3 seeds.db < skills/x_account_seed_discovery/sql/schema.sql
-   ```
+    ```bash
+    mkdir -p ~/.x-discovery
+    sqlite3 ~/.x-discovery/seed.sql < skills/x_account_seed_discovery/sql/schema.sql
+    ```
 
 ## 🚀 Quick Start
 
 ### 1. Initialize Database
 
 ```bash
-sqlite3 seeds.db < skills/x_account_seed_discovery/sql/schema.sql
+# Create the config directory
+mkdir -p ~/.x-discovery
+
+# Initialize the database
+sqlite3 ~/.x-discovery/seed.sql < skills/x_account_seed_discovery/sql/schema.sql
 ```
 
 ### 2. Set Environment Variables
 
 ```bash
-export SQLITE_PATH="seeds.db"
+export SQLITE_PATH="$HOME/.x-discovery/seed.sql"
 export DEFAULT_REGION="Indonesia"
 # Set your news/X search provider credentials as needed
 ```
