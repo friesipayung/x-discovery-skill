@@ -11,6 +11,7 @@ Usage:
 import argparse
 import json
 import re
+import socket
 import sys
 import time
 import urllib.parse
@@ -20,6 +21,68 @@ from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup
+
+
+# Google DNS-over-HTTPS (DoH) endpoint
+DOH_URL = "https://dns.google/resolve"
+
+
+class GoogleDoHResolver:
+    """DNS resolver using Google DNS-over-HTTPS (DoH)."""
+
+    @staticmethod
+    def resolve(hostname: str) -> str:
+        """Resolve hostname using Google DoH."""
+        try:
+            response = requests.get(
+                DOH_URL,
+                params={"name": hostname, "type": "A", "do": "false", "cd": "false"},
+                headers={"Accept": "application/dns-json"},
+                timeout=10,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            if data.get("Status") == 0 and data.get("Answer"):
+                # Return first A record
+                for answer in data["Answer"]:
+                    if answer.get("type") == 1:  # A record
+                        return answer["data"]
+
+            # Fallback to system resolver if DoH fails
+            return socket.gethostbyname(hostname)
+        except Exception:
+            # Fallback to system resolver
+            return socket.gethostbyname(hostname)
+
+
+class DNSHTTPAdapter(requests.adapters.HTTPAdapter):
+    """Custom HTTP adapter that uses Google DoH for resolution."""
+
+    def resolve(self, hostname):
+        """Resolve hostname using Google DoH."""
+        return GoogleDoHResolver.resolve(hostname)
+
+    def send(self, request, **kwargs):
+        """Send request with custom DNS resolution."""
+        # Extract hostname from URL
+        parsed = urllib.parse.urlparse(request.url)
+        hostname = parsed.hostname
+
+        if hostname and hostname not in ["localhost", "127.0.0.1"]:
+            try:
+                ip = self.resolve(hostname)
+                # Replace hostname with IP in URL but keep Host header
+                new_url = request.url.replace(f"//{hostname}", f"//{ip}", 1)
+                request.url = new_url
+                # Ensure Host header is set to original hostname
+                if "Host" not in request.headers:
+                    request.headers["Host"] = hostname
+            except Exception:
+                # If resolution fails, let requests handle it
+                pass
+
+        return super().send(request, **kwargs)
 
 
 @dataclass
@@ -64,6 +127,9 @@ class DuckDuckGoNewsSearcher:
                 "Connection": "keep-alive",
             }
         )
+        # Mount custom DNS adapter for both HTTP and HTTPS
+        self.session.mount("http://", DNSHTTPAdapter())
+        self.session.mount("https://", DNSHTTPAdapter())
 
     def search(self, query: str, max_results: int = 20) -> List[NewsArticle]:
         """
