@@ -15,7 +15,53 @@ Instead of using APIs, the agent will:
 The agent must have:
 - Playwright installed (`playwright install chromium`)
 - `playwright-stealth` package (`pip install playwright-stealth`)
+- **AdGuard AdBlocker extension** (recommended for cleaner scraping)
 - Ability to run Python code with Playwright
+
+### Installing AdGuard Extension
+
+Download and install the AdGuard extension for cleaner page scraping and better stealth:
+
+**Extension URL:** https://chromewebstore.google.com/detail/adguard-adblocker/bgnkhhnnamicmpeenaelnjfhikgbkllg
+
+**Why use AdGuard:**
+- Blocks ads that interfere with element selection
+- Reduces page load times
+- Helps avoid detection by blocking trackers
+- Cleaner DOM for reliable scraping
+
+**Setup with Playwright:**
+
+```python
+from playwright.sync_api import sync_playwright
+
+# Path to downloaded AdGuard extension (extracted .crx or unpacked folder)
+adguard_path = "/path/to/adguard-extension"  # Or .crx file
+
+def launch_browser_with_adguard():
+    with sync_playwright() as p:
+        # Launch with extension
+        browser = p.chromium.launch(
+            headless=False,  # Extensions require headful mode
+            args=[
+                f'--disable-extensions-except={adguard_path}',
+                f'--load-extension={adguard_path}',
+                '--disable-blink-features=AutomationControlled',
+            ]
+        )
+        return browser
+```
+
+**Note:** Chrome extensions require `headless=False`. For fully headless operation, you can still use AdGuard's filtering capabilities or use the stealth mode without the extension.
+
+**Alternative: Use AdGuard DNS or filtering without extension:**
+```python
+# Block ad/tracking domains at browser level
+context = browser.new_context(
+    bypass_csp=True,
+    # Additional args to block common ad domains
+)
+```
 
 ## Step 1: News Search with Playwright
 
@@ -721,6 +767,22 @@ def run_x_discovery_skill(input_params):
    ```python
    viewport={'width': 1920, 'height': 1080}
    ```
+
+6. **Use AdGuard extension** (highly recommended):
+   ```python
+   # Install: https://chromewebstore.google.com/detail/adguard-adblocker/bgnkhhnnamicmpeenaelnjfhikgbkllg
+   browser = p.chromium.launch(
+       headless=False,  # Required for extensions
+       args=[
+           f'--load-extension=/path/to/adguard',
+           '--disable-blink-features=AutomationControlled',
+       ]
+   )
+   ```
+   - Blocks ads and trackers
+   - Reduces page load times
+   - Cleaner DOM for reliable scraping
+   - Helps avoid detection
 
 ## Error Handling
 

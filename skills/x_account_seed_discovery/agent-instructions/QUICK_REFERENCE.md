@@ -94,7 +94,23 @@ with sync_playwright() as p:
 - [ ] Add random delays between actions
 - [ ] Scroll like a human (not too fast)
 - [ ] Disable automation flags
+- [ ] **Install AdGuard extension** (https://chromewebstore.google.com/detail/adguard-adblocker/bgnkhhnnamicmpeenaelnjfhikgbkllg)
 - [ ] Handle errors gracefully
+
+## Extension Setup (Quick)
+
+```python
+# Launch browser with AdGuard extension
+browser = p.chromium.launch(
+    headless=False,  # Required for extensions
+    args=[
+        '--load-extension=/path/to/adguard-extension',
+        '--disable-blink-features=AutomationControlled',
+    ]
+)
+```
+
+**Download:** https://chromewebstore.google.com/detail/adguard-adblocker/bgnkhhnnamicmpeenaelnjfhikgbkllg
 
 ## Error Recovery
 
