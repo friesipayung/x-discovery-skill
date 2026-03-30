@@ -177,6 +177,7 @@ interface AccountSignals {
 - Count unique keywords matched
 - Collect sample posts (most engaged, most recent)
 - Track which queries found the account
+- Stop aggregating when `max_accounts_to_aggregate` limit reached
 
 ### 7. Anti Riding-the-Waves Filter
 
@@ -225,7 +226,21 @@ if (clear_region_mismatch) skip;
 - Track seen handles in current batch
 - Skip if already processed in this run
 
-### 9. AI Judge Implementation
+### 8.1 Minimum Accounts Check
+
+After prefilter and anti-wave filtering, validate minimum requirements:
+
+```javascript
+if (accountsAfterFiltering < min_accounts_to_evaluate) {
+  // Run fails or produces warning
+  // Log insufficient accounts error
+  // Still produce partial results if possible
+}
+```
+
+- `min_accounts_to_evaluate` default: 1 (no minimum requirement)
+- If set higher, run will fail/warn if fewer accounts pass all filters
+- Useful for ensuring sufficient sample size for meaningful results
 
 **Prompt Structure:**
 ```markdown

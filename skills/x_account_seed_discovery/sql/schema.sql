@@ -21,12 +21,15 @@ CREATE TABLE IF NOT EXISTS runs (
     total_keywords INTEGER DEFAULT 0,
     total_x_posts INTEGER DEFAULT 0,
     total_accounts_aggregated INTEGER DEFAULT 0,
+    total_accounts_limited INTEGER DEFAULT 0,
     total_prefiltered INTEGER DEFAULT 0,
     total_anti_wave_rejected INTEGER DEFAULT 0,
     total_ai_evaluated INTEGER DEFAULT 0,
     total_eligible INTEGER DEFAULT 0,
     total_not_eligible INTEGER DEFAULT 0,
     total_uncertain INTEGER DEFAULT 0,
+    min_accounts_required INTEGER DEFAULT 1,
+    min_accounts_met BOOLEAN DEFAULT TRUE,
     error_message TEXT
 );
 
@@ -217,12 +220,15 @@ SELECT
     r.total_keywords,
     r.total_x_posts,
     r.total_accounts_aggregated,
+    r.total_accounts_limited,
     r.total_prefiltered,
     r.total_anti_wave_rejected,
     r.total_ai_evaluated,
     r.total_eligible,
     r.total_not_eligible,
     r.total_uncertain,
+    r.min_accounts_required,
+    r.min_accounts_met,
     CASE 
         WHEN r.finished_at IS NOT NULL 
         THEN ROUND((julianday(r.finished_at) - julianday(r.started_at)) * 86400, 2)

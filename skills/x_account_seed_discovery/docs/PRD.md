@@ -234,7 +234,9 @@ Skill harus menerima input berikut.
 - `max_news_articles`
 - `max_keywords`
 - `max_x_posts`
+- `max_accounts_to_aggregate`
 - `max_accounts_to_evaluate`
+- `min_accounts_to_evaluate`
 - `anti_wave_mode` default `true`
 - `save_mode` (`all`, `eligible_only`)
 - `custom_prompt_appendix`
@@ -254,7 +256,9 @@ Skill harus menerima input berikut.
   "max_news_articles": 20,
   "max_keywords": 40,
   "max_x_posts": 300,
+  "max_accounts_to_aggregate": 100,
   "max_accounts_to_evaluate": 100,
+  "min_accounts_to_evaluate": 1,
   "anti_wave_mode": true,
   "save_mode": "all"
 }
@@ -585,12 +589,15 @@ Fields:
 - `total_keywords`
 - `total_x_posts`
 - `total_accounts_aggregated`
+- `total_accounts_limited`
 - `total_prefiltered`
 - `total_anti_wave_rejected`
 - `total_ai_evaluated`
 - `total_eligible`
 - `total_not_eligible`
 - `total_uncertain`
+- `min_accounts_required`
+- `min_accounts_met`
 
 ### 15.2 Table: `news_articles`
 
@@ -699,7 +706,9 @@ Fields:
   "max_news_articles": 20,
   "max_keywords": 40,
   "max_x_posts": 300,
+  "max_accounts_to_aggregate": 100,
   "max_accounts_to_evaluate": 100,
+  "min_accounts_to_evaluate": 1,
   "anti_wave_mode": true,
   "save_mode": "all",
   "provider": "default",
@@ -719,6 +728,7 @@ Fields:
   "total_keywords": 28,
   "total_x_posts": 240,
   "total_accounts_aggregated": 97,
+  "total_accounts_limited": 23,
   "total_prefiltered": 71,
   "total_anti_wave_rejected": 14,
   "total_ai_evaluated": 57,
@@ -728,6 +738,8 @@ Fields:
   "inserted_accounts": 17,
   "updated_accounts": 40,
   "skipped_duplicates": 25,
+  "min_accounts_met": true,
+  "min_accounts_required": 1,
   "eligible_accounts": [
     {
       "handle": "example",

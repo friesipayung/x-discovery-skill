@@ -90,11 +90,25 @@
       "minimum": 10,
       "maximum": 1000
     },
+    "max_accounts_to_aggregate": {
+      "type": "integer",
+      "description": "Maximum unique accounts to aggregate from X posts before filtering",
+      "default": 100,
+      "minimum": 10,
+      "maximum": 500
+    },
     "max_accounts_to_evaluate": {
       "type": "integer",
       "description": "Maximum accounts for AI evaluation",
       "default": 100,
       "minimum": 1,
+      "maximum": 500
+    },
+    "min_accounts_to_evaluate": {
+      "type": "integer",
+      "description": "Minimum accounts required for AI evaluation (run fails if fewer accounts pass filters)",
+      "default": 1,
+      "minimum": 0,
       "maximum": 500
     },
     "anti_wave_mode": {
@@ -136,7 +150,9 @@
       "max_news_articles": 20,
       "max_keywords": 40,
       "max_x_posts": 300,
+      "max_accounts_to_aggregate": 100,
       "max_accounts_to_evaluate": 100,
+      "min_accounts_to_evaluate": 1,
       "anti_wave_mode": true,
       "save_mode": "all"
     },

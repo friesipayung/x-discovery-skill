@@ -177,7 +177,9 @@ opencode run skill x_account_seed_discovery --input '{
   "min_followers": 5000,
   "max_news_articles": 20,
   "max_x_posts": 300,
+  "max_accounts_to_aggregate": 100,
   "max_accounts_to_evaluate": 100,
+  "min_accounts_to_evaluate": 1,
   "anti_wave_mode": true,
   "save_mode": "all"
 }
@@ -194,12 +196,15 @@ opencode run skill x_account_seed_discovery --input '{
   "total_keywords": 28,
   "total_x_posts": 240,
   "total_accounts_aggregated": 97,
+  "total_accounts_limited": 23,
   "total_prefiltered": 71,
   "total_anti_wave_rejected": 14,
   "total_ai_evaluated": 57,
   "total_eligible": 21,
   "total_not_eligible": 28,
   "total_uncertain": 8,
+  "min_accounts_met": true,
+  "min_accounts_required": 1,
   "eligible_accounts": [
     {
       "handle": "example",
@@ -269,7 +274,9 @@ The skill uses SQLite with 7 tables:
 | `min_followers` | - | Minimum follower count |
 | `max_news_articles` | 20 | News articles to fetch |
 | `max_x_posts` | 300 | X posts to search |
+| `max_accounts_to_aggregate` | 100 | Accounts to collect from X posts |
 | `max_accounts_to_evaluate` | 100 | Accounts for AI evaluation |
+| `min_accounts_to_evaluate` | 1 | Minimum accounts required (run fails if fewer) |
 | `anti_wave_mode` | true | Filter opportunistic accounts |
 | `save_mode` | `all` | `all` or `eligible_only` |
 | `dry_run` | false | Preview without DB writes |

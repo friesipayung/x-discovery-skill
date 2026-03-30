@@ -81,7 +81,9 @@ Export eligible accounts
 | `min_followers` | - | Minimum follower count |
 | `max_news_articles` | 20 | News articles to fetch |
 | `max_x_posts` | 300 | X posts to search |
+| `max_accounts_to_aggregate` | 100 | Accounts to collect from X posts |
 | `max_accounts_to_evaluate` | 100 | Accounts for AI evaluation |
+| `min_accounts_to_evaluate` | 1 | Minimum accounts required (run fails if fewer) |
 | `anti_wave_mode` | true | Filter opportunistic accounts |
 | `save_mode` | `all` | `all` or `eligible_only` |
 
@@ -166,7 +168,9 @@ opencode run skill x_account_seed_discovery --input '{
   "max_news_articles": 20,
   "max_keywords": 40,
   "max_x_posts": 300,
+  "max_accounts_to_aggregate": 100,
   "max_accounts_to_evaluate": 100,
+  "min_accounts_to_evaluate": 1,
   "anti_wave_mode": true,
   "save_mode": "all"
 }
@@ -178,6 +182,7 @@ The skill returns a JSON summary including:
 - **Run metadata** - `run_id`, `topic`, `region`, timestamps
 - **Statistics** - Articles fetched, keywords extracted, posts searched, accounts evaluated
 - **Decision counts** - `total_eligible`, `total_not_eligible`, `total_uncertain`
+- **Minimum check** - `min_accounts_met`, `min_accounts_required`
 - **Eligible accounts** - Array of quality seed accounts with scores and reasons
 - **Errors** - Any issues encountered (empty array if successful)
 
@@ -190,6 +195,8 @@ The skill returns a JSON summary including:
   "total_eligible": 21,
   "total_not_eligible": 28,
   "total_uncertain": 8,
+  "min_accounts_met": true,
+  "min_accounts_required": 1,
   "eligible_accounts": [
     {
       "handle": "example",

@@ -51,6 +51,11 @@
       "description": "Number of unique accounts found",
       "minimum": 0
     },
+    "total_accounts_limited": {
+      "type": "integer",
+      "description": "Number of accounts skipped due to aggregate limit",
+      "minimum": 0
+    },
     "total_prefiltered": {
       "type": "integer",
       "description": "Number of accounts filtered by deterministic prefilter",
@@ -213,6 +218,15 @@
     "dry_run": {
       "type": "boolean",
       "description": "Whether this was a dry run (no DB writes)"
+    },
+    "min_accounts_met": {
+      "type": "boolean",
+      "description": "Whether minimum accounts requirement was met"
+    },
+    "min_accounts_required": {
+      "type": "integer",
+      "description": "Minimum accounts required for evaluation",
+      "minimum": 0
     }
   },
   "additionalProperties": false,
@@ -226,6 +240,7 @@
       "total_keywords": 28,
       "total_x_posts": 240,
       "total_accounts_aggregated": 97,
+      "total_accounts_limited": 23,
       "total_prefiltered": 71,
       "total_anti_wave_rejected": 14,
       "total_ai_evaluated": 57,
@@ -246,6 +261,8 @@
         }
       ],
       "errors": [],
+      "min_accounts_met": true,
+      "min_accounts_required": 1,
       "started_at": "2026-03-30T10:00:00Z",
       "finished_at": "2026-03-30T10:15:30Z",
       "duration_seconds": 930,
