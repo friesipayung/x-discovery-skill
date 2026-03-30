@@ -195,6 +195,8 @@ class SotweSearcher:
                     print("  - Use a VPN or different network")
                     print("  - Try nitter.net or other X/Twitter viewers")
                     print("  - Use the official X API instead")
+                    print("\nWaiting 10 seconds before closing browser...")
+                    time.sleep(10)  # Wait so user can see the browser
                     return posts
                 raise
 
