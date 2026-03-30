@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright, Page, Browser, BrowserContext
-from playwright_stealth import stealth_sync
+from playwright_stealth import Stealth
 from bs4 import BeautifulSoup
 
 
@@ -151,7 +151,8 @@ class SotweSearcher:
         page = self.context.new_page()
 
         if self.stealth:
-            stealth_sync(page)
+            stealth = Stealth()
+            stealth.apply_stealth_sync(page)
 
         return page
 
@@ -178,7 +179,25 @@ class SotweSearcher:
             url = f"{self.BASE_URL}/search/{encoded_query}"
 
             print(f"Searching: {url}")
-            page.goto(url, wait_until="networkidle", timeout=60000)
+
+            try:
+                page.goto(url, wait_until="networkidle", timeout=60000)
+            except Exception as e:
+                if "ERR_CONNECTION_REFUSED" in str(e) or "ERR_NAME_NOT_RESOLVED" in str(
+                    e
+                ):
+                    print(f"ERROR: Cannot connect to {self.BASE_URL}")
+                    print("This may be due to:")
+                    print("  - Geographic blocking")
+                    print("  - Network restrictions")
+                    print("  - The site being temporarily down")
+                    print("\nAlternatives to try:")
+                    print("  - Use a VPN or different network")
+                    print("  - Try nitter.net or other X/Twitter viewers")
+                    print("  - Use the official X API instead")
+                    return posts
+                raise
+
             self._random_delay()
 
             # Scroll to load more content
