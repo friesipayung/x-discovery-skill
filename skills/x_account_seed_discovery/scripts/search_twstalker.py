@@ -654,8 +654,17 @@ class TwStalkerSearcher:
                     page.close()
                     break
                 else:
-                    print(f"⚠️ Profile not found on attempt {attempt + 1}")
-                    page.close()
+                    # Check if profile genuinely doesn't exist (not an error)
+                    if self._is_profile_not_found(page):
+                        print(f"⚠️ Profile @{handle} does not exist (not found page)")
+                        page.close()
+                        break  # Don't retry - profile genuinely not found
+                    else:
+                        print(
+                            f"⚠️ Profile not found on attempt {attempt + 1} (will retry)"
+                        )
+                        page.close()
+                        # Continue to next retry attempt
 
             except Exception as e:
                 print(f"Error on attempt {attempt + 1}: {e}", file=sys.stderr)
@@ -745,6 +754,63 @@ class TwStalkerSearcher:
         except Exception as e:
             print(f"Error parsing profile: {e}", file=sys.stderr)
             return None
+
+    def _is_profile_not_found(self, page) -> bool:
+        """Check if the page shows a 'profile not found' error."""
+        try:
+            html = page.content()
+            soup = BeautifulSoup(html, "lxml")
+
+            # Check for common "not found" indicators
+            not_found_patterns = [
+                r"not found",
+                r"doesn't exist",
+                r"does not exist",
+                r"page not found",
+                r"404",
+                r"error",
+                r"user not found",
+                r"account not found",
+                r"profile not found",
+                r"suspended",
+                r"this account",
+            ]
+
+            # Check page title
+            title = soup.find("title")
+            if title:
+                title_text = title.get_text().lower()
+                for pattern in not_found_patterns:
+                    if re.search(pattern, title_text, re.I):
+                        return True
+
+            # Check for error messages in page content
+            page_text = soup.get_text().lower()
+            error_indicators = [
+                "this account doesn’t exist",
+                "this account does not exist",
+                "user not found",
+                "profile not found",
+                "page not found",
+                "404 not found",
+                "account suspended",
+                "this user",
+            ]
+            for indicator in error_indicators:
+                if indicator in page_text:
+                    return True
+
+            # Check for specific error elements
+            error_elem = soup.find(
+                text=re.compile(r"(not found|doesn't exist|does not exist)", re.I)
+            )
+            if error_elem:
+                return True
+
+            return False
+        except Exception:
+            # If we can't determine, assume it might be retriable
+            return False
 
     def close(self):
         """Close browser and cleanup."""
